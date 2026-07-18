@@ -1,7 +1,11 @@
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 const { Client, GatewayIntentBits, Collection, Partials } = require('discord.js');
 const { BOT_TOKEN } = require('./src/utils/config');
+
+// HTTP-Server damit Render keinen Port-Fehler wirft
+http.createServer((req, res) => res.end('Bot läuft.')).listen(process.env.PORT || 3000);
 
 if (!BOT_TOKEN) {
   throw new Error('BOT_TOKEN is required.');

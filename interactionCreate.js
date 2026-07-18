@@ -31,6 +31,10 @@ async function handleSetupStart(interaction) {
     .map(r => new StringSelectMenuOptionBuilder().setLabel(r.name).setValue(r.id))
     .slice(0, 25);
 
+  if (!roles.length) {
+    return interaction.reply({ content: 'Keine Rollen gefunden. Erstelle zuerst eine Rolle auf deinem Server.', ephemeral: true });
+  }
+
   const select = new StringSelectMenuBuilder()
     .setCustomId('setup:role')
     .setPlaceholder('Vorstandsrolle wählen')
