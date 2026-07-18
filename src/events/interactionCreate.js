@@ -170,7 +170,7 @@ module.exports = async function interactionCreate(client, interaction) {
               .setStyle(TextInputStyle.Paragraph)
               .setRequired(true)
               .setMaxLength(1000)
-              .setPlaceholder(isPoster ? 'Text der auf dem Plakat steht...' : 'Vollständiger Redetext...'),
+              .setPlaceholder(isPoster ? 'Text der zum Plakat eingereicht wird...' : 'Vollständiger Redetext...'),
           ),
         );
       return interaction.showModal(modal);

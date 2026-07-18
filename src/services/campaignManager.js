@@ -94,7 +94,8 @@ async function finishActiveEntry(client, guildId) {
 async function archiveAndAdvance(client, guildId, entry) {
   const finishedAt = Date.now();
   updateEntry(entry.id, { status: 'finished', finishedAt });
-  await sendToArchive(client, guildId, { ...entry, finishedAt });
+  const freshEntry = getEntry(entry.id);
+  await sendToArchive(client, guildId, { ...freshEntry, finishedAt });
   await activateNextEntry(client, guildId);
 }
 
