@@ -14,6 +14,7 @@ function saveGuildSettings(settings) {
         vorstandChannelId = ?,
         campaignChannelId = ?,
         archiveChannelId = ?,
+        imageStoreChannelId = ?,
         panelMessageId = ?,
         campaignMessageId = ?,
         activeEntryId = ?
@@ -23,6 +24,7 @@ function saveGuildSettings(settings) {
       settings.vorstandChannelId || null,
       settings.campaignChannelId || null,
       settings.archiveChannelId || null,
+      settings.imageStoreChannelId || null,
       settings.panelMessageId || null,
       settings.campaignMessageId || null,
       settings.activeEntryId || null,
@@ -38,16 +40,18 @@ function saveGuildSettings(settings) {
       vorstandChannelId,
       campaignChannelId,
       archiveChannelId,
+      imageStoreChannelId,
       panelMessageId,
       campaignMessageId,
       activeEntryId
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     settings.guildId,
     settings.vorstandRoleId || null,
     settings.vorstandChannelId || null,
     settings.campaignChannelId || null,
     settings.archiveChannelId || null,
+    settings.imageStoreChannelId || null,
     settings.panelMessageId || null,
     settings.campaignMessageId || null,
     settings.activeEntryId || null,

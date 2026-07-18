@@ -33,7 +33,7 @@ async function handleSetupStart(interaction) {
     return interaction.reply({ content: '❌ Keine Rollen gefunden. Erstelle zuerst eine Rolle (z.B. "Bundesvorstand").', ephemeral: true });
   }
   await interaction.reply({
-    content: '**Setup (1/4):** Wähle die Vorstandsrolle.',
+    content: '**Setup (1/5):** Wähle die Vorstandsrolle.',
     components: [new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder().setCustomId('setup:role').setPlaceholder('Vorstandsrolle wählen').addOptions(roles)
     )],
@@ -124,7 +124,7 @@ module.exports = async function interactionCreate(client, interaction) {
         const settings = getGuildSettings(interaction.guildId) || { guildId: interaction.guildId };
         settings.vorstandRoleId = interaction.values[0];
         saveGuildSettings(settings);
-        return channelSelectStep(interaction, 'setup:channel:vorstand', '**Setup (2/4):** Wähle den **Vorstandskanal** (nur für Vorstand sichtbar).');
+        return channelSelectStep(interaction, 'setup:channel:vorstand', '**Setup (2/5):** Wähle den **Vorstandskanal** (nur für Vorstand sichtbar).');
       }
       if (action === 'channel') {
         const target = rest[0];
@@ -132,15 +132,20 @@ module.exports = async function interactionCreate(client, interaction) {
         if (target === 'vorstand') {
           updated.vorstandChannelId = interaction.values[0];
           saveGuildSettings(updated);
-          return channelSelectStep(interaction, 'setup:channel:campaign', '**Setup (3/4):** Wähle den **Wahlkampfkanal** (für alle Mitglieder sichtbar).');
+          return channelSelectStep(interaction, 'setup:channel:campaign', '**Setup (3/5):** Wähle den **Wahlkampfkanal** (für alle Mitglieder sichtbar).');
         }
         if (target === 'campaign') {
           updated.campaignChannelId = interaction.values[0];
           saveGuildSettings(updated);
-          return channelSelectStep(interaction, 'setup:channel:archive', '**Setup (4/4):** Wähle den **Archivkanal**.');
+          return channelSelectStep(interaction, 'setup:channel:archive', '**Setup (4/5):** Wähle den **Archivkanal**.');
         }
         if (target === 'archive') {
           updated.archiveChannelId = interaction.values[0];
+          saveGuildSettings(updated);
+          return channelSelectStep(interaction, 'setup:channel:imagestore', '**Setup (5/5):** Wähle den **Bildspeicher-Kanal** (unsichtbar für Mitglieder, speichert Plakat-Bilder dauerhaft).');
+        }
+        if (target === 'imagestore') {
+          updated.imageStoreChannelId = interaction.values[0];
           saveGuildSettings(updated);
           await interaction.update({ content: '✅ Setup abgeschlossen! Panels werden erstellt...', components: [] });
           await renderPanel(client, interaction.guildId);

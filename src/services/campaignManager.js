@@ -44,9 +44,21 @@ async function awaitAndAttachImage(client, guildId, entryId, userId) {
   if (!collected?.size) return null;
 
   const msg = collected.first();
-  const url = msg.attachments.first().url;
+  const attachment = msg.attachments.first();
 
-  // Nachricht löschen damit der Kanal sauber bleibt
+  // Bild in Bildspeicher-Kanal reposten damit URL permanent bleibt
+  let url = attachment.url;
+  if (settings?.imageStoreChannelId) {
+    const storeChannel = await client.channels.fetch(settings.imageStoreChannelId).catch(() => null);
+    if (storeChannel) {
+      const stored = await storeChannel.send({
+        files: [{ attachment: attachment.url, name: attachment.name }],
+      }).catch(() => null);
+      if (stored) url = stored.attachments.first()?.url || url;
+    }
+  }
+
+  // Original im Vorstandskanal löschen
   await msg.delete().catch(() => {});
 
   updateEntry(entryId, { imageUrl: url });

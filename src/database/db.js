@@ -16,6 +16,7 @@ function initializeDatabase() {
       vorstandChannelId TEXT,
       campaignChannelId TEXT,
       archiveChannelId TEXT,
+      imageStoreChannelId TEXT,
       panelMessageId TEXT,
       campaignMessageId TEXT,
       activeEntryId TEXT
