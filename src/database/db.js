@@ -34,13 +34,15 @@ function initializeDatabase() {
       type TEXT NOT NULL,
       title TEXT NOT NULL,
       text TEXT NOT NULL,
+      imageUrl TEXT,
       districtId TEXT,
-      attachment TEXT,
       createdBy TEXT NOT NULL,
       createdAt INTEGER NOT NULL,
       finishedAt INTEGER,
       status TEXT NOT NULL,
-      queuePosition INTEGER NOT NULL
+      queuePosition INTEGER NOT NULL,
+      submissionCount INTEGER NOT NULL DEFAULT 0,
+      maxSubmissions INTEGER NOT NULL DEFAULT 1
     );
   `);
 }

@@ -3,3 +3,11 @@ data/
 .env
 *.sqlite
 *.db
+KI CHAT/
+# VS Code History Dateien im Root ignorieren
+[0-9A-Za-z][0-9A-Za-z][0-9A-Za-z][0-9A-Za-z].js
+[0-9A-Za-z][0-9A-Za-z][0-9A-Za-z][0-9A-Za-z][0-9A-Za-z].js
+timetable.js.js
+entries.json
+WetterVorhersage.js
+timetable.js
