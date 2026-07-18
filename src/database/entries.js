@@ -28,6 +28,7 @@ function addEntry(entry) {
     title: entry.title,
     text: entry.text,
     imageUrl: entry.imageUrl || null,
+    targetArea: entry.targetArea || null,
     districtId: entry.districtId || null,
     createdBy: entry.createdBy,
     createdAt: entry.createdAt || Date.now(),
@@ -38,11 +39,11 @@ function addEntry(entry) {
     maxSubmissions: entry.type === 'poster' ? 10 : 1,
   };
   db.prepare(`
-    INSERT INTO entries (id, guildId, type, title, text, imageUrl, districtId, createdBy, createdAt, finishedAt, status, queuePosition, submissionCount, maxSubmissions)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO entries (id, guildId, type, title, text, imageUrl, targetArea, districtId, createdBy, createdAt, finishedAt, status, queuePosition, submissionCount, maxSubmissions)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     record.id, record.guildId, record.type, record.title, record.text,
-    record.imageUrl, record.districtId, record.createdBy, record.createdAt,
+    record.imageUrl, record.targetArea, record.districtId, record.createdBy, record.createdAt,
     record.finishedAt, record.status, record.queuePosition,
     record.submissionCount, record.maxSubmissions,
   );
@@ -55,12 +56,12 @@ function updateEntry(entryId, updates) {
   const next = { ...current, ...updates };
   db.prepare(`
     UPDATE entries SET
-      type = ?, title = ?, text = ?, imageUrl = ?, districtId = ?,
+      type = ?, title = ?, text = ?, imageUrl = ?, targetArea = ?, districtId = ?,
       createdBy = ?, createdAt = ?, finishedAt = ?, status = ?,
       queuePosition = ?, submissionCount = ?, maxSubmissions = ?
     WHERE id = ?
   `).run(
-    next.type, next.title, next.text, next.imageUrl, next.districtId,
+    next.type, next.title, next.text, next.imageUrl, next.targetArea, next.districtId,
     next.createdBy, next.createdAt, next.finishedAt, next.status,
     next.queuePosition, next.submissionCount, next.maxSubmissions,
     entryId,

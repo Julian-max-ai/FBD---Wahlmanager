@@ -1,16 +1,16 @@
-const { EmbedBuilder } = require('discord.js');
 const { getActiveEntry, getQueuedEntries, addEntry, updateEntry, deleteEntry, getEntry, incrementSubmission } = require('../database/entries');
 const { getGuildSettings, setActiveEntry } = require('../database/settings');
 const { listDistricts } = require('../database/districts');
-const { renderPanel, renderCampaign } = require('./panelManager');
+const { renderPanel, renderCampaign, buildArchiveEmbed } = require('./panelManager');
 
 async function createEntry(client, guildId, payload) {
   const entry = addEntry({
     guildId,
     type: payload.type,
-    title: payload.title,
+    title: payload.title || '',
     text: payload.text,
     imageUrl: payload.imageUrl || null,
+    targetArea: payload.targetArea || null,
     districtId: payload.districtId,
     createdBy: payload.createdBy,
     createdAt: Date.now(),
@@ -28,8 +28,33 @@ async function createEntry(client, guildId, payload) {
   return entry;
 }
 
-// +1 Einreichung auf aktivem Eintrag
-// Gibt { done: bool, count, max } zurück
+// Wartet bis zu 2 Minuten auf ein Bild im Vorstandskanal und speichert die Discord CDN URL
+async function awaitAndAttachImage(client, guildId, entryId, userId) {
+  const settings = getGuildSettings(guildId);
+  if (!settings?.vorstandChannelId) return null;
+  const channel = await client.channels.fetch(settings.vorstandChannelId).catch(() => null);
+  if (!channel) return null;
+
+  const filter = m =>
+    m.author.id === userId &&
+    m.attachments.size > 0 &&
+    /\.(png|jpg|jpeg|gif|webp)$/i.test(m.attachments.first().name);
+
+  const collected = await channel.awaitMessages({ filter, max: 1, time: 120000 }).catch(() => null);
+  if (!collected?.size) return null;
+
+  const msg = collected.first();
+  const url = msg.attachments.first().url;
+
+  // Nachricht löschen damit der Kanal sauber bleibt
+  await msg.delete().catch(() => {});
+
+  updateEntry(entryId, { imageUrl: url });
+  await renderPanel(client, guildId);
+  await renderCampaign(client, guildId);
+  return url;
+}
+
 async function submitActiveEntry(client, guildId) {
   const active = getActiveEntry(guildId);
   if (!active) return null;
@@ -43,11 +68,10 @@ async function submitActiveEntry(client, guildId) {
     await renderCampaign(client, guildId);
   }
 
-  const updated = require('../database/entries').getEntry(active.id);
-  return { done: maxReached, count: updated.submissionCount, max: updated.maxSubmissions };
+  const updated = getEntry(active.id);
+  return { done: maxReached, count: updated?.submissionCount ?? active.submissionCount + 1, max: active.maxSubmissions };
 }
 
-// Aktiven Eintrag manuell als fertig markieren (ohne vollen Zähler)
 async function finishActiveEntry(client, guildId) {
   const active = getActiveEntry(guildId);
   if (!active) return null;
@@ -69,21 +93,8 @@ async function sendToArchive(client, guildId, entry) {
   if (!channel) return;
 
   const districts = listDistricts(guildId);
-  const district = districts.find(d => d.id === entry.districtId)?.name || '—';
-  const typeLabel = entry.type === 'poster' ? '🖼️ Wahlplakat' : '📝 Rede';
-
-  const embed = new EmbedBuilder()
-    .setTitle(`📁 ${typeLabel} — ${entry.title}`)
-    .setColor(0x95a5a6)
-    .addFields(
-      { name: 'Wahlkreis', value: district, inline: true },
-      { name: 'Eingereicht', value: `${entry.submissionCount}/${entry.maxSubmissions}`, inline: true },
-      { name: 'Erstellt von', value: `<@${entry.createdBy}>`, inline: true },
-      { name: 'Erledigt am', value: new Date(entry.finishedAt).toLocaleString('de-DE'), inline: true },
-      { name: 'Text', value: entry.text || '—' },
-    );
-
-  if (entry.imageUrl) embed.setImage(entry.imageUrl);
+  const districtStr = districts.find(d => d.id === entry.districtId)?.name || '—';
+  const embed = buildArchiveEmbed(entry, districtStr);
   await channel.send({ embeds: [embed] });
 }
 
@@ -105,10 +116,8 @@ async function activateNextEntry(client, guildId) {
 async function deleteEntryById(client, guildId, entryId) {
   const entry = getEntry(entryId);
   if (!entry) return null;
-
   const wasActive = entry.status === 'active';
   deleteEntry(entryId);
-
   if (wasActive) {
     await activateNextEntry(client, guildId);
   } else {
@@ -120,6 +129,7 @@ async function deleteEntryById(client, guildId, entryId) {
 
 module.exports = {
   createEntry,
+  awaitAndAttachImage,
   submitActiveEntry,
   finishActiveEntry,
   activateNextEntry,

@@ -42,7 +42,8 @@ function initializeDatabase() {
       status TEXT NOT NULL,
       queuePosition INTEGER NOT NULL,
       submissionCount INTEGER NOT NULL DEFAULT 0,
-      maxSubmissions INTEGER NOT NULL DEFAULT 1
+      maxSubmissions INTEGER NOT NULL DEFAULT 1,
+      targetArea TEXT
     );
   `);
 }
