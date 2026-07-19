@@ -98,7 +98,7 @@ module.exports = async function interactionCreate(client, interaction) {
       }
       db.prepare("UPDATE entries SET status = 'finished', finishedAt = ? WHERE guildId = ? AND status != 'finished'").run(Date.now(), interaction.guildId);
       await renderEnded(client, interaction.guildId);
-      await updateGuildSettings(interaction.guildId, { panelMessageId: null, campaignMessageId: null, activeEntryId: null, wahlkampftyp: null });
+      await updateGuildSettings(interaction.guildId, { activeEntryId: null, wahlkampftyp: null });
       const typName = typ === 'bundestag' ? 'Bundestagswahlkampf' : 'Landtagswahlkampf';
       return interaction.reply({ content: `✅ **${typName}** beendet. Mit /setup kann ein neuer Wahlkampf gestartet werden.`, ephemeral: true });
     }

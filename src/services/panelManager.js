@@ -219,26 +219,54 @@ async function renderEnded(client, guildId) {
   const stats = getStats(guildId);
   const typ = wahltypLabel(settings);
 
-  const endEmbed = new EmbedBuilder()
-    .setColor(0xF1C40F)
-    .setTitle(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏁  ${typ} — Wahlkampf beendet!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-    .setDescription('> Vielen Dank für euren Einsatz im Wahlkampf!\n> Wir hoffen auf starke Ergebnisse und freuen uns auf den nächsten Wahlkampf.\n> \n> 🗳️  **Viel Erfolg bei der Wahl!**')
-    .addFields({ name: '📊  Erledigte Aufgaben', value: `**${stats.finished}**`, inline: true })
-    .setFooter({ text: 'FBD Wahlkampfverwaltung' }).setTimestamp();
-
-  // Vorstandspanel leeren
+  // Vorstandspanel: leer mit deaktivierten Buttons, IDs bleiben erhalten
   if (settings?.vorstandChannelId && settings?.panelMessageId) {
     const vc = await client.channels.fetch(settings.vorstandChannelId).catch(() => null);
     if (vc) {
       const pm = await vc.messages.fetch(settings.panelMessageId).catch(() => null);
-      if (pm) await pm.edit({ embeds: [endEmbed], components: [] }).catch(() => {});
+      if (pm) {
+        const panelEmbed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🗳️  Vorstandspanel  ·  Kein aktiver Wahlkampf\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+          .addFields(
+            { name: '▶️  AKTIVE AUFGABE', value: '> *Kein aktiver Wahlkampf.*\n> Führe `/setup` aus um einen neuen Wahlkampf zu starten.' },
+            { name: '\u200b', value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' },
+            { name: '📦  WARTESCHLANGE', value: '*Leer.*' },
+            { name: '\u200b', value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' },
+            { name: '✅  Erledigt', value: `**${stats.finished}**`, inline: true },
+            { name: '🕐  Offen', value: '**0**', inline: true },
+            { name: '📊  Gesamt', value: `**${stats.finished}**`, inline: true },
+          )
+          .setFooter({ text: '🔒 Nur für Vorstandsmitglieder  ·  Letzte Aktualisierung' }).setTimestamp();
+
+        const row1 = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('entry:create').setLabel('➕ Neu erstellen').setStyle(ButtonStyle.Primary).setDisabled(true),
+          new ButtonBuilder().setCustomId('entry:submit').setLabel('📤 +1 Eingereicht').setStyle(ButtonStyle.Success).setDisabled(true),
+          new ButtonBuilder().setCustomId('entry:finish').setLabel('✅ Als fertig markieren').setStyle(ButtonStyle.Secondary).setDisabled(true),
+          new ButtonBuilder().setCustomId('entry:delete').setLabel('🗑️ Löschen').setStyle(ButtonStyle.Danger).setDisabled(true),
+        );
+        const row2 = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('entry:priorityUp').setLabel('⬆ Priorität hoch').setStyle(ButtonStyle.Secondary).setDisabled(true),
+          new ButtonBuilder().setCustomId('entry:priorityDown').setLabel('⬇ Priorität runter').setStyle(ButtonStyle.Secondary).setDisabled(true),
+          new ButtonBuilder().setCustomId('entry:showText').setLabel('📋 Text kopieren').setStyle(ButtonStyle.Secondary).setDisabled(true),
+          new ButtonBuilder().setCustomId('entry:refresh').setLabel('🔄 Aktualisieren').setStyle(ButtonStyle.Secondary),
+        );
+        await pm.edit({ embeds: [panelEmbed], components: [row1, row2] }).catch(() => {});
+      }
     }
   }
 
-  // Mitgliederpanel
+  // Mitgliederpanel: Abschluss-Embed
   if (settings?.campaignChannelId) {
     const cc = await client.channels.fetch(settings.campaignChannelId).catch(() => null);
     if (cc) {
+      const endEmbed = new EmbedBuilder()
+        .setColor(0xF1C40F)
+        .setTitle(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏁  ${typ} — Wahlkampf beendet!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+        .setDescription('> Vielen Dank für euren Einsatz im Wahlkampf!\n> Wir hoffen auf starke Ergebnisse und freuen uns auf den nächsten Wahlkampf.\n> \n> 🗳️  **Viel Erfolg bei der Wahl!**')
+        .addFields({ name: '📊  Erledigte Aufgaben', value: `**${stats.finished}**`, inline: true })
+        .setFooter({ text: 'FBD Wahlkampfverwaltung' }).setTimestamp();
+
       if (settings.campaignMessageId) {
         const cm = await cc.messages.fetch(settings.campaignMessageId).catch(() => null);
         if (cm) { await cm.edit({ embeds: [endEmbed], components: [] }); return; }
