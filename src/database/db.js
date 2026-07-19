@@ -26,6 +26,7 @@ function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS wahlkreise (
       id TEXT PRIMARY KEY,
       guildId TEXT NOT NULL,
+      wahlkampftyp TEXT NOT NULL DEFAULT 'bundestag',
       name TEXT NOT NULL,
       position INTEGER NOT NULL
     );

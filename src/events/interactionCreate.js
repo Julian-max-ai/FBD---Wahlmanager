@@ -113,9 +113,11 @@ module.exports = async function interactionCreate(client, interaction) {
       const guildId = interaction.guildId;
       if (sub === 'hinzufügen') {
         const name = interaction.options.getString('name');
-        addDistrict(guildId, name);
+        const settings = getGuildSettings(guildId);
+        if (!settings?.wahlkampftyp) return interaction.reply({ content: '❌ Kein aktiver Wahlkampf. Führe zuerst `/setup` aus.', ephemeral: true });
+        addDistrict(guildId, name, settings.wahlkampftyp);
         await renderPanel(client, guildId);
-        return interaction.reply({ content: `✅ Wahlkreis **${name}** hinzugefügt.`, ephemeral: true });
+        return interaction.reply({ content: `✅ Wahlkreis **${name}** für ${settings.wahlkampftyp === 'bundestag' ? 'Bundestagswahl' : 'Landtagswahl'} hinzugefügt.`, ephemeral: true });
       }
       if (sub === 'bearbeiten') {
         updateDistrict(interaction.options.getString('id'), interaction.options.getString('name'));

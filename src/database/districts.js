@@ -1,19 +1,23 @@
 const { randomUUID } = require('crypto');
 const { db } = require('./db');
 
-function listDistricts(guildId) {
+function listDistricts(guildId, wahlkampftyp) {
+  if (wahlkampftyp) {
+    return db.prepare('SELECT * FROM wahlkreise WHERE guildId = ? AND wahlkampftyp = ? ORDER BY position, name').all(guildId, wahlkampftyp);
+  }
   return db.prepare('SELECT * FROM wahlkreise WHERE guildId = ? ORDER BY position, name').all(guildId);
 }
 
-function addDistrict(guildId, name) {
-  const nextPosition = listDistricts(guildId).length + 1;
+function addDistrict(guildId, name, wahlkampftyp = 'bundestag') {
+  const existing = listDistricts(guildId, wahlkampftyp);
   const district = {
     id: randomUUID(),
     guildId,
+    wahlkampftyp,
     name,
-    position: nextPosition,
+    position: existing.length + 1,
   };
-  db.prepare('INSERT INTO wahlkreise (id, guildId, name, position) VALUES (?, ?, ?, ?)').run(district.id, district.guildId, district.name, district.position);
+  db.prepare('INSERT INTO wahlkreise (id, guildId, wahlkampftyp, name, position) VALUES (?, ?, ?, ?, ?)').run(district.id, district.guildId, district.wahlkampftyp, district.name, district.position);
   return district;
 }
 
@@ -30,10 +34,4 @@ function getDistrict(id) {
   return db.prepare('SELECT * FROM wahlkreise WHERE id = ?').get(id) || null;
 }
 
-module.exports = {
-  listDistricts,
-  addDistrict,
-  updateDistrict,
-  deleteDistrict,
-  getDistrict,
-};
+module.exports = { listDistricts, addDistrict, updateDistrict, deleteDistrict, getDistrict };

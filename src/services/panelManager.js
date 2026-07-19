@@ -61,7 +61,7 @@ async function renderPanel(client, guildId) {
 
   const active = getActiveEntry(guildId);
   const queue = getQueuedEntries(guildId);
-  const districts = listDistricts(guildId);
+  const districts = listDistricts(guildId, settings.wahlkampftyp);
   const stats = getStats(guildId);
 
   const embed = new EmbedBuilder()
@@ -152,8 +152,7 @@ async function renderCampaign(client, guildId) {
 
   const active = getActiveEntry(guildId);
   const queue = getQueuedEntries(guildId);
-  const districts = listDistricts(guildId);
-  const serverLabel = settings.wahlkampftyp === 'landtag' ? 'Landtagsserver' : 'Bundestagsserver';
+  const districts = listDistricts(guildId, settings.wahlkampftyp);
 
   let embed;
   if (active) {
@@ -165,7 +164,7 @@ async function renderCampaign(client, guildId) {
     embed = new EmbedBuilder()
       .setColor(0x57F287)
       .setTitle(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📢  ${wahltypLabel(settings)} — Aktuelle Aufgabe\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-      .setDescription(`> **Bitte reicht folgendes auf dem ${serverLabel} ein!**\n> ${typeLabel(active.type)}  ·  Wahlkreis: **${district}**${area ? `  ·  Gebiet: **${area}**` : ''}`)
+      .setDescription(`> **Bitte reicht folgendes auf dem Bundestagsserver ein!**\n> ${typeLabel(active.type)}  ·  Wahlkreis: **${district}**${area ? `  ·  Gebiet: **${area}**` : ''}`)
       .addFields({ name: '📋  Text zum Einreichen', value: `\`\`\`\n${active.text.slice(0, 1000)}\n\`\`\`` });
 
     if (active.imageUrl) {
@@ -213,34 +212,40 @@ async function renderCampaign(client, guildId) {
   await updateGuildSettings(guildId, { campaignMessageId: sent.id });
 }
 
-// ─── WAHLKAMPF BEENDET EMBED ──────────────────────────────────────────────────
+// ─── WAHLKAMPF BEENDET ────────────────────────────────────────────────────────
 
 async function renderEnded(client, guildId) {
   const settings = getGuildSettings(guildId);
-  if (!settings?.campaignChannelId) return;
-  const channel = await client.channels.fetch(settings.campaignChannelId).catch(() => null);
-  if (!channel) return;
-
   const stats = getStats(guildId);
   const typ = wahltypLabel(settings);
 
-  const embed = new EmbedBuilder()
+  const endEmbed = new EmbedBuilder()
     .setColor(0xF1C40F)
     .setTitle(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏁  ${typ} — Wahlkampf beendet!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-    .setDescription(
-      '> Vielen Dank für euren Einsatz im Wahlkampf!\n> Wir hoffen auf starke Ergebnisse und freuen uns auf den nächsten Wahlkampf.\n> \n> 🗳️  **Viel Erfolg bei der Wahl!**'
-    )
-    .addFields(
-      { name: '📊  Erledigte Aufgaben', value: `**${stats.finished}**`, inline: true },
-    )
-    .setFooter({ text: 'FBD Wahlkampfverwaltung' })
-    .setTimestamp();
+    .setDescription('> Vielen Dank für euren Einsatz im Wahlkampf!\n> Wir hoffen auf starke Ergebnisse und freuen uns auf den nächsten Wahlkampf.\n> \n> 🗳️  **Viel Erfolg bei der Wahl!**')
+    .addFields({ name: '📊  Erledigte Aufgaben', value: `**${stats.finished}**`, inline: true })
+    .setFooter({ text: 'FBD Wahlkampfverwaltung' }).setTimestamp();
 
-  if (settings.campaignMessageId) {
-    const msg = await channel.messages.fetch(settings.campaignMessageId).catch(() => null);
-    if (msg) { await msg.edit({ embeds: [embed], components: [] }); return; }
+  // Vorstandspanel leeren
+  if (settings?.vorstandChannelId && settings?.panelMessageId) {
+    const vc = await client.channels.fetch(settings.vorstandChannelId).catch(() => null);
+    if (vc) {
+      const pm = await vc.messages.fetch(settings.panelMessageId).catch(() => null);
+      if (pm) await pm.edit({ embeds: [endEmbed], components: [] }).catch(() => {});
+    }
   }
-  await channel.send({ embeds: [embed], components: [] });
+
+  // Mitgliederpanel
+  if (settings?.campaignChannelId) {
+    const cc = await client.channels.fetch(settings.campaignChannelId).catch(() => null);
+    if (cc) {
+      if (settings.campaignMessageId) {
+        const cm = await cc.messages.fetch(settings.campaignMessageId).catch(() => null);
+        if (cm) { await cm.edit({ embeds: [endEmbed], components: [] }); return; }
+      }
+      await cc.send({ embeds: [endEmbed], components: [] });
+    }
+  }
 }
 
 // ─── ARCHIV EMBED ─────────────────────────────────────────────────────────────
