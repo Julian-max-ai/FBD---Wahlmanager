@@ -10,6 +10,7 @@ function saveGuildSettings(settings) {
   if (existing) {
     db.prepare(`
       UPDATE guild_settings SET
+        wahlkampftyp = ?,
         vorstandRoleId = ?,
         vorstandChannelId = ?,
         campaignChannelId = ?,
@@ -20,6 +21,7 @@ function saveGuildSettings(settings) {
         activeEntryId = ?
       WHERE guildId = ?
     `).run(
+      settings.wahlkampftyp || null,
       settings.vorstandRoleId || null,
       settings.vorstandChannelId || null,
       settings.campaignChannelId || null,
@@ -35,18 +37,12 @@ function saveGuildSettings(settings) {
 
   db.prepare(`
     INSERT INTO guild_settings (
-      guildId,
-      vorstandRoleId,
-      vorstandChannelId,
-      campaignChannelId,
-      archiveChannelId,
-      imageStoreChannelId,
-      panelMessageId,
-      campaignMessageId,
-      activeEntryId
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      guildId, wahlkampftyp, vorstandRoleId, vorstandChannelId, campaignChannelId,
+      archiveChannelId, imageStoreChannelId, panelMessageId, campaignMessageId, activeEntryId
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     settings.guildId,
+    settings.wahlkampftyp || null,
     settings.vorstandRoleId || null,
     settings.vorstandChannelId || null,
     settings.campaignChannelId || null,

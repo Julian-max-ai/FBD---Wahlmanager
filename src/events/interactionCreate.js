@@ -6,8 +6,10 @@ const {
 const { getGuildSettings, saveGuildSettings } = require('../database/settings');
 const { listDistricts, addDistrict, updateDistrict, deleteDistrict } = require('../database/districts');
 const { getActiveEntry, getQueuedEntries } = require('../database/entries');
-const { renderPanel, renderCampaign } = require('../services/panelManager');
+const { renderPanel, renderCampaign, renderEnded } = require('../services/panelManager');
 const { createEntry, awaitAndAttachImage, submitActiveEntry, finishActiveEntry, deleteEntryById } = require('../services/campaignManager');
+const { updateGuildSettings } = require('../database/settings');
+const { db } = require('../database/db');
 const { moveEntryUp, moveEntryDown } = require('../services/queueManager');
 
 const pendingEntries = new Map();
@@ -33,9 +35,12 @@ async function handleSetupStart(interaction) {
     return interaction.reply({ content: '❌ Keine Rollen gefunden. Erstelle zuerst eine Rolle (z.B. "Bundesvorstand").', ephemeral: true });
   }
   await interaction.reply({
-    content: '**Setup (1/5):** Wähle die Vorstandsrolle.',
+    content: '**Setup (1/6):** Welche Wahl wird vorbereitet?',
     components: [new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder().setCustomId('setup:role').setPlaceholder('Vorstandsrolle wählen').addOptions(roles)
+      new StringSelectMenuBuilder().setCustomId('setup:wahltyp').setPlaceholder('Wahlkampftyp wählen').addOptions(
+        new StringSelectMenuOptionBuilder().setLabel('🏛️ Bundestagswahl').setValue('bundestag'),
+        new StringSelectMenuOptionBuilder().setLabel('🏠 Landtagswahl').setValue('landtag'),
+      )
     )],
     ephemeral: true,
   });
@@ -81,6 +86,23 @@ module.exports = async function interactionCreate(client, interaction) {
 
   // ── Slash Commands ──
   if (interaction.isChatInputCommand()) {
+    if (interaction.commandName === 'wahlkampf') {
+      if (!interaction.memberPermissions?.has('Administrator')) {
+        return interaction.reply({ content: '❌ Nur Administratoren können den Wahlkampf beenden.', ephemeral: true });
+      }
+      const typ = interaction.options.getString('typ');
+      const settings = getGuildSettings(interaction.guildId);
+      if (!settings || settings.wahlkampftyp !== typ) {
+        const typName = typ === 'bundestag' ? 'Bundestagswahlkampf' : 'Landtagswahlkampf';
+        return interaction.reply({ content: `❌ Kein aktiver **${typName}** gefunden.`, ephemeral: true });
+      }
+      db.prepare("UPDATE entries SET status = 'finished', finishedAt = ? WHERE guildId = ? AND status != 'finished'").run(Date.now(), interaction.guildId);
+      await renderEnded(client, interaction.guildId);
+      await updateGuildSettings(interaction.guildId, { panelMessageId: null, campaignMessageId: null, activeEntryId: null, wahlkampftyp: null });
+      const typName = typ === 'bundestag' ? 'Bundestagswahlkampf' : 'Landtagswahlkampf';
+      return interaction.reply({ content: `✅ **${typName}** beendet. Mit /setup kann ein neuer Wahlkampf gestartet werden.`, ephemeral: true });
+    }
+
     if (interaction.commandName === 'setup') return handleSetupStart(interaction);
 
     if (interaction.commandName === 'wahlkreis') {
@@ -120,11 +142,26 @@ module.exports = async function interactionCreate(client, interaction) {
 
     // Setup
     if (scope === 'setup') {
+      if (action === 'wahltyp') {
+        const settings = getGuildSettings(interaction.guildId) || { guildId: interaction.guildId };
+        settings.wahlkampftyp = interaction.values[0];
+        saveGuildSettings(settings);
+        const roles = interaction.guild.roles.cache
+          .filter(r => !r.managed && r.id !== interaction.guild.id)
+          .map(r => new StringSelectMenuOptionBuilder().setLabel(r.name).setValue(r.id))
+          .slice(0, 25);
+        return interaction.update({
+          content: '**Setup (2/6):** Wähle die Vorstandsrolle.',
+          components: [new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('setup:role').setPlaceholder('Vorstandsrolle wählen').addOptions(roles)
+          )],
+        });
+      }
       if (action === 'role') {
         const settings = getGuildSettings(interaction.guildId) || { guildId: interaction.guildId };
         settings.vorstandRoleId = interaction.values[0];
         saveGuildSettings(settings);
-        return channelSelectStep(interaction, 'setup:channel:vorstand', '**Setup (2/5):** Wähle den **Vorstandskanal** (nur für Vorstand sichtbar).');
+        return channelSelectStep(interaction, 'setup:channel:vorstand', '**Setup (3/6):** Wähle den **Vorstandskanal**.');
       }
       if (action === 'channel') {
         const target = rest[0];
@@ -132,17 +169,17 @@ module.exports = async function interactionCreate(client, interaction) {
         if (target === 'vorstand') {
           updated.vorstandChannelId = interaction.values[0];
           saveGuildSettings(updated);
-          return channelSelectStep(interaction, 'setup:channel:campaign', '**Setup (3/5):** Wähle den **Wahlkampfkanal** (für alle Mitglieder sichtbar).');
+          return channelSelectStep(interaction, 'setup:channel:campaign', '**Setup (4/6):** Wähle den **Wahlkampfkanal** (für alle Mitglieder sichtbar).');
         }
         if (target === 'campaign') {
           updated.campaignChannelId = interaction.values[0];
           saveGuildSettings(updated);
-          return channelSelectStep(interaction, 'setup:channel:archive', '**Setup (4/5):** Wähle den **Archivkanal**.');
+          return channelSelectStep(interaction, 'setup:channel:archive', '**Setup (5/6):** Wähle den **Archivkanal**.');
         }
         if (target === 'archive') {
           updated.archiveChannelId = interaction.values[0];
           saveGuildSettings(updated);
-          return channelSelectStep(interaction, 'setup:channel:imagestore', '**Setup (5/5):** Wähle den **Bildspeicher-Kanal** (unsichtbar für Mitglieder, speichert Plakat-Bilder dauerhaft).');
+          return channelSelectStep(interaction, 'setup:channel:imagestore', '**Setup (6/6):** Wähle den **Bildspeicher-Kanal** (unsichtbar für Mitglieder).');
         }
         if (target === 'imagestore') {
           updated.imageStoreChannelId = interaction.values[0];

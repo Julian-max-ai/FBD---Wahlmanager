@@ -1,7 +1,7 @@
 const { getActiveEntry, getQueuedEntries, addEntry, updateEntry, deleteEntry, getEntry, incrementSubmission } = require('../database/entries');
 const { getGuildSettings, setActiveEntry } = require('../database/settings');
 const { listDistricts } = require('../database/districts');
-const { renderPanel, renderCampaign, buildArchiveEmbed } = require('./panelManager');
+const { renderPanel, renderCampaign, renderEnded, buildArchiveEmbed } = require('./panelManager');
 
 async function createEntry(client, guildId, payload) {
   const entry = addEntry({
@@ -107,7 +107,7 @@ async function sendToArchive(client, guildId, entry) {
 
   const districts = listDistricts(guildId);
   const districtStr = districts.find(d => d.id === entry.districtId)?.name || '—';
-  const embed = buildArchiveEmbed(entry, districtStr);
+  const embed = buildArchiveEmbed(entry, districtStr, settings);
   await channel.send({ embeds: [embed] });
 }
 

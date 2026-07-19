@@ -12,6 +12,7 @@ function initializeDatabase() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS guild_settings (
       guildId TEXT PRIMARY KEY,
+      wahlkampftyp TEXT,
       vorstandRoleId TEXT,
       vorstandChannelId TEXT,
       campaignChannelId TEXT,
