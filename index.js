@@ -40,6 +40,12 @@ client.on('interactionCreate', async interaction => {
 });
 
 console.log('Versuche Login...');
+const https = require('https');
+https.get('https://discord.com/api/v10/gateway', res => {
+  console.log('Discord erreichbar, Status:', res.statusCode);
+}).on('error', err => {
+  console.error('Discord NICHT erreichbar:', err.message);
+});
 const loginTimeout = setTimeout(() => {
   console.error('Login Timeout nach 15s — Token ungültig oder Discord nicht erreichbar');
   process.exit(1);
