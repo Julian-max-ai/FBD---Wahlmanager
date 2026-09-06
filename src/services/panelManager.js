@@ -54,15 +54,15 @@ function wahltypLabel(settings) {
 // ─── VORSTANDSPANEL ───────────────────────────────────────────────────────────
 
 async function renderPanel(client, guildId) {
-  const settings = getGuildSettings(guildId);
+  const settings = await getGuildSettings(guildId);
   if (!settings?.vorstandChannelId) return;
   const channel = await client.channels.fetch(settings.vorstandChannelId).catch(() => null);
   if (!channel) return;
 
-  const active = getActiveEntry(guildId);
-  const queue = getQueuedEntries(guildId);
-  const districts = listDistricts(guildId, settings.wahlkampftyp);
-  const stats = getStats(guildId);
+  const active = await getActiveEntry(guildId);
+  const queue = await getQueuedEntries(guildId);
+  const districts = await listDistricts(guildId, settings.wahlkampftyp);
+  const stats = await getStats(guildId);
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
@@ -145,14 +145,14 @@ async function renderPanel(client, guildId) {
 // ─── MITGLIEDERPANEL ──────────────────────────────────────────────────────────
 
 async function renderCampaign(client, guildId) {
-  const settings = getGuildSettings(guildId);
+  const settings = await getGuildSettings(guildId);
   if (!settings?.campaignChannelId) return;
   const channel = await client.channels.fetch(settings.campaignChannelId).catch(() => null);
   if (!channel) return;
 
-  const active = getActiveEntry(guildId);
-  const queue = getQueuedEntries(guildId);
-  const districts = listDistricts(guildId, settings.wahlkampftyp);
+  const active = await getActiveEntry(guildId);
+  const queue = await getQueuedEntries(guildId);
+  const districts = await listDistricts(guildId, settings.wahlkampftyp);
 
   let embed;
   if (active) {
@@ -215,8 +215,8 @@ async function renderCampaign(client, guildId) {
 // ─── WAHLKAMPF BEENDET ────────────────────────────────────────────────────────
 
 async function renderEnded(client, guildId) {
-  const settings = getGuildSettings(guildId);
-  const stats = getStats(guildId);
+  const settings = await getGuildSettings(guildId);
+  const stats = await getStats(guildId);
   const typ = wahltypLabel(settings);
 
   // Vorstandspanel: leer mit deaktivierten Buttons, IDs bleiben erhalten
@@ -279,12 +279,12 @@ async function renderEnded(client, guildId) {
 // ─── PLAKATANFRAGEN PANEL ─────────────────────────────────────────────────────
 
 async function renderPlakatPanel(client, guildId) {
-  const settings = getGuildSettings(guildId);
+  const settings = await getGuildSettings(guildId);
   if (!settings?.plakatRequestChannelId) return;
   const channel = await client.channels.fetch(settings.plakatRequestChannelId).catch(() => null);
   if (!channel) return;
 
-  const districts = listDistricts(guildId, settings.wahlkampftyp);
+  const districts = await listDistricts(guildId, settings.wahlkampftyp);
   const statusEmoji = { green: '🟢', yellow: '🟡', red: '🔴' };
   const statusText = { green: 'Noch viele gebraucht', yellow: 'Wenige gebraucht', red: 'Gesperrt' };
   const districtList = districts.length

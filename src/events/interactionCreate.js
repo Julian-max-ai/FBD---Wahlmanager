@@ -16,7 +16,7 @@ const { addPoints, getLeaderboard } = require('../database/activity');
 const pendingEntries = new Map();
 
 async function hasVorstandRole(interaction) {
-  const settings = getGuildSettings(interaction.guildId);
+  const settings = await getGuildSettings(interaction.guildId);
   if (!settings?.vorstandRoleId) return false;
   const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
   return member?.roles.cache.has(settings.vorstandRoleId) ?? false;
@@ -71,7 +71,7 @@ async function handleWahlkampfErstellen(interaction) {
   if (!interaction.memberPermissions?.has('Administrator')) {
     return interaction.reply({ content: '❌ Nur Administratoren können einen Wahlkampf starten.', ephemeral: true });
   }
-  const settings = getGuildSettings(interaction.guildId);
+  const settings = await getGuildSettings(interaction.guildId);
   if (!settings?.vorstandRoleId) {
     return interaction.reply({ content: '❌ Führe zuerst `/setup` aus um den Bot zu konfigurieren.', ephemeral: true });
   }
@@ -94,7 +94,7 @@ async function handleCreateEntry(interaction, client) {
     return interaction.reply({ content: '❌ Nur Vorstandsmitglieder können Einträge erstellen.', ephemeral: true });
   }
 
-  const approved = getApprovedPosters(interaction.guildId);
+  const approved = await getApprovedPosters(interaction.guildId);
 
   if (approved.length > 0) {
     const options = [
@@ -144,7 +144,7 @@ module.exports = async function interactionCreate(client, interaction) {
 
     if (interaction.commandName === 'aktivitat') {
       if (!await hasVorstandRole(interaction)) return interaction.reply({ content: '❌ Nur Vorstandsmitglieder.', ephemeral: true });
-      const board = getLeaderboard(interaction.guildId);
+      const board = await getLeaderboard(interaction.guildId);
       if (!board.length) return interaction.reply({ content: '📊 Noch keine Aktivitätspunkte vorhanden.', ephemeral: true });
       const lines = board.slice(0, 20).map((e, i) => `**${i + 1}.** <@${e.userId}> — **${e.total}** Punkte`);
       return interaction.reply({ content: `📊 **Aktivitäts-Leaderboard**\n\n${lines.join('\n')}`, ephemeral: true });
@@ -160,12 +160,12 @@ module.exports = async function interactionCreate(client, interaction) {
 
       if (sub === 'beenden') {
         const typ = interaction.options.getString('typ');
-        const settings = getGuildSettings(interaction.guildId);
+        const settings = await getGuildSettings(interaction.guildId);
         if (!settings || settings.wahlkampftyp !== typ) {
           const typName = typ === 'bundestag' ? 'Bundestagswahlkampf' : 'Landtagswahlkampf';
           return interaction.reply({ content: `❌ Kein aktiver **${typName}** gefunden.`, ephemeral: true });
         }
-        db.prepare("UPDATE entries SET status = 'finished', finishedAt = ? WHERE guildId = ? AND status != 'finished'").run(Date.now(), interaction.guildId);
+        db.execute({ sql: "UPDATE entries SET status = 'finished', finishedAt = ? WHERE guildId = ? AND status != 'finished'", args: [Date.now(), interaction.guildId] });
         await renderEnded(client, interaction.guildId);
         await updateGuildSettings(interaction.guildId, { activeEntryId: null, wahlkampftyp: null });
         const typName = typ === 'bundestag' ? 'Bundestagswahlkampf' : 'Landtagswahlkampf';
@@ -195,28 +195,28 @@ module.exports = async function interactionCreate(client, interaction) {
         });
       }
       if (sub === 'bearbeiten') {
-        updateDistrict(interaction.options.getString('id'), interaction.options.getString('name'));
+        await updateDistrict(interaction.options.getString('id'), interaction.options.getString('name'));
         await renderPanel(client, guildId);
         await renderPlakatPanel(client, guildId);
         return interaction.reply({ content: '✅ Wahlkreis aktualisiert.', ephemeral: true });
       }
       if (sub === 'löschen') {
-        deleteDistrict(interaction.options.getString('id'));
+        await deleteDistrict(interaction.options.getString('id'));
         await renderPanel(client, guildId);
         await renderPlakatPanel(client, guildId);
         return interaction.reply({ content: '✅ Wahlkreis gelöscht.', ephemeral: true });
       }
       if (sub === 'liste') {
-        const settings = getGuildSettings(guildId);
-        const districts = listDistricts(guildId, settings?.wahlkampftyp);
+        const settings = await getGuildSettings(guildId);
+        const districts = await listDistricts(guildId, settings?.wahlkampftyp);
         if (!districts.length) return interaction.reply({ content: 'Keine Wahlkreise vorhanden.', ephemeral: true });
         const statusEmoji = { green: '🟢', yellow: '🟡', red: '🔴' };
         const list = districts.map(d => `${statusEmoji[d.status] || '⚪'} **${d.name}** — ID: \`${d.id}\``).join('\n');
         return interaction.reply({ content: `**Wahlkreise:**\n${list}`, ephemeral: true });
       }
       if (sub === 'status') {
-        const settings = getGuildSettings(guildId);
-        const districts = listDistricts(guildId, settings?.wahlkampftyp);
+        const settings = await getGuildSettings(guildId);
+        const districts = await listDistricts(guildId, settings?.wahlkampftyp);
         if (!districts.length) return interaction.reply({ content: '❌ Keine Wahlkreise vorhanden.', ephemeral: true });
         const statusEmoji = { green: '🟢', yellow: '🟡', red: '🔴' };
         const options = districts.map(d =>
@@ -241,45 +241,45 @@ module.exports = async function interactionCreate(client, interaction) {
 
     // ── Haupt-Setup ──
     if (scope === 'mainsetup') {
-      const existing = getGuildSettings(interaction.guildId) || { guildId: interaction.guildId };
+      const existing = await getGuildSettings(interaction.guildId) || { guildId: interaction.guildId };
       const settings = { ...existing };
 
       if (action === 'role') {
         settings.vorstandRoleId = interaction.values[0];
-        saveGuildSettings(settings);
+        await saveGuildSettings(settings);
         return channelSelectStep(interaction, 'mainsetup:channel:vorstand', '**Haupt-Setup (2/9):** Wähle den **Vorstandskanal**.');
       }
       if (action === 'channel') {
         const target = rest[0];
-        const updated = getGuildSettings(interaction.guildId) || { guildId: interaction.guildId };
+        const updated = await getGuildSettings(interaction.guildId) || { guildId: interaction.guildId };
         if (target === 'vorstand') {
           updated.vorstandChannelId = interaction.values[0];
-          saveGuildSettings(updated);
+          await saveGuildSettings(updated);
           return channelSelectStep(interaction, 'mainsetup:channel:campaign', '**Haupt-Setup (3/9):** Wähle den **Wahlkampfkanal**.');
         }
         if (target === 'campaign') {
           updated.campaignChannelId = interaction.values[0];
-          saveGuildSettings(updated);
+          await saveGuildSettings(updated);
           return channelSelectStep(interaction, 'mainsetup:channel:archive', '**Haupt-Setup (4/9):** Wähle den **Archivkanal**.');
         }
         if (target === 'archive') {
           updated.archiveChannelId = interaction.values[0];
-          saveGuildSettings(updated);
+          await saveGuildSettings(updated);
           return channelSelectStep(interaction, 'mainsetup:channel:imagestore', '**Haupt-Setup (5/9):** Wähle den **Bildspeicher-Kanal**.');
         }
         if (target === 'imagestore') {
           updated.imageStoreChannelId = interaction.values[0];
-          saveGuildSettings(updated);
+          await saveGuildSettings(updated);
           return channelSelectStep(interaction, 'mainsetup:channel:plakatrequest', '**Haupt-Setup (6/9):** Wähle den **Plakatanfragen-Kanal**.');
         }
         if (target === 'plakatrequest') {
           updated.plakatRequestChannelId = interaction.values[0];
-          saveGuildSettings(updated);
+          await saveGuildSettings(updated);
           return channelSelectStep(interaction, 'mainsetup:channel:plakatreview', '**Haupt-Setup (7/9):** Wähle den **Plakatprüfungs-Kanal**.');
         }
         if (target === 'plakatreview') {
           updated.plakatReviewChannelId = interaction.values[0];
-          saveGuildSettings(updated);
+          await saveGuildSettings(updated);
           return interaction.update({
             content: '**Haupt-Setup — Punkte (8/9):** Wie viele Punkte für ein angenommenes **Wahlplakat**?',
             components: [new ActionRowBuilder().addComponents(
@@ -291,10 +291,10 @@ module.exports = async function interactionCreate(client, interaction) {
         }
       }
       if (action === 'points') {
-        const updated2 = getGuildSettings(interaction.guildId) || { guildId: interaction.guildId };
+        const updated2 = await getGuildSettings(interaction.guildId) || { guildId: interaction.guildId };
         if (rest[0] === 'poster') {
           updated2.pointsPoster = parseInt(interaction.values[0]);
-          saveGuildSettings(updated2);
+          await saveGuildSettings(updated2);
           return interaction.update({
             content: '**Haupt-Setup — Punkte (9/9):** Wie viele Punkte für eine angenommene **Rede**?',
             components: [new ActionRowBuilder().addComponents(
@@ -306,7 +306,7 @@ module.exports = async function interactionCreate(client, interaction) {
         }
         if (rest[0] === 'speech') {
           updated2.pointsSpeech = parseInt(interaction.values[0]);
-          saveGuildSettings(updated2);
+          await saveGuildSettings(updated2);
           await interaction.update({ content: '✅ Haupt-Setup abgeschlossen! Plakatanfragen-Panel wird erstellt...', components: [] });
           await renderPlakatPanel(client, interaction.guildId);
           return;
@@ -318,7 +318,7 @@ module.exports = async function interactionCreate(client, interaction) {
     if (scope === 'wahlkreis' && action === 'add') {
       const name = decodeURIComponent(rest[0]);
       const typ = interaction.values[0];
-      addDistrict(interaction.guildId, name, typ);
+      await addDistrict(interaction.guildId, name, typ);
       await renderPanel(client, interaction.guildId);
       await renderPlakatPanel(client, interaction.guildId);
       const typName = typ === 'bundestag' ? 'Bundestagswahl' : 'Landtagswahl';
@@ -345,11 +345,11 @@ module.exports = async function interactionCreate(client, interaction) {
       pendingEntries.delete(pendingKey);
 
       const districtId = interaction.values[0];
-      const district = getDistrict(districtId);
+      const district = await getDistrict(districtId);
       if (district?.status === 'red') return interaction.update({ content: '❌ Dieser Wahlkreis ist gesperrt 🔴.', components: [] });
 
-      const settings = getGuildSettings(interaction.guildId);
-      const request = addPosterRequest(interaction.guildId, interaction.user.id, pending.imageUrl, pending.bgSource, true);
+      const settings = await getGuildSettings(interaction.guildId);
+      const request = await addPosterRequest(interaction.guildId, interaction.user.id, pending.imageUrl, pending.bgSource, true);
       const reviewChannel = await client.channels.fetch(settings.plakatReviewChannelId).catch(() => null);
       if (!reviewChannel) return interaction.update({ content: '❌ Prüfungskanal nicht gefunden.', components: [] });
 
@@ -375,14 +375,14 @@ module.exports = async function interactionCreate(client, interaction) {
       );
 
       await reviewChannel.send({ embeds: [embed], components: [row] });
-      return interaction.update({ content: `✅ Deine Plakatanfrage wurde eingereicht! Bei Annahme erhältst du **${getGuildSettings(interaction.guildId)?.pointsPoster ?? 3} Punkt${(getGuildSettings(interaction.guildId)?.pointsPoster ?? 3) !== 1 ? 'e' : ''}**.`, components: [] });
+      return interaction.update({ content: `✅ Deine Plakatanfrage wurde eingereicht! Bei Annahme erhältst du **${(await getGuildSettings(interaction.guildId))?.pointsPoster ?? 3} Punkt${((await getGuildSettings(interaction.guildId))?.pointsPoster ?? 3) !== 1 ? 'e' : ''}**.`, components: [] });
     }
 
     // ── Wahlkreis Status ──
     if (scope === 'district' && action === 'status') {
       if (rest[0] === 'select') {
         const districtId = interaction.values[0];
-        const district = getDistrict(districtId);
+        const district = await getDistrict(districtId);
         if (!district) return interaction.update({ content: '❌ Wahlkreis nicht gefunden.', components: [] });
         return interaction.update({
           content: `**${district.name}** — Neuen Status wählen:`,
@@ -398,8 +398,8 @@ module.exports = async function interactionCreate(client, interaction) {
       if (rest[0] === 'set') {
         const districtId = rest[1];
         const newStatus = interaction.values[0];
-        updateDistrictStatus(districtId, newStatus);
-        const district = getDistrict(districtId);
+        await updateDistrictStatus(districtId, newStatus);
+        const district = await getDistrict(districtId);
         await renderPlakatPanel(client, interaction.guildId);
         const statusLabel = { green: '🟢 Grün', yellow: '🟡 Gelb', red: '🔴 Rot' }[newStatus];
         return interaction.update({ content: `✅ Status von **${district?.name}** auf **${statusLabel}** gesetzt.`, components: [] });
@@ -425,7 +425,7 @@ module.exports = async function interactionCreate(client, interaction) {
       }
       // Angenommenes Plakat verwenden
       const posterId = value.replace('approved:', '');
-      const poster = getApprovedPosters(interaction.guildId).find(p => p.id === posterId);
+      const poster = (await getApprovedPosters(interaction.guildId)).find(p => p.id === posterId);
       if (!poster) return interaction.update({ content: '❌ Plakat nicht mehr vorhanden.', components: [] });
 
       const key = `${interaction.user.id}:${interaction.guildId}`;
@@ -476,8 +476,8 @@ module.exports = async function interactionCreate(client, interaction) {
       if (!pending) return interaction.update({ content: '⏱️ Sitzung abgelaufen.', components: [] });
       pending.targetArea = interaction.values[0];
 
-      const settings = getGuildSettings(interaction.guildId);
-      const districts = listDistricts(interaction.guildId, settings?.wahlkampftyp);
+      const settings = await getGuildSettings(interaction.guildId);
+      const districts = await listDistricts(interaction.guildId, settings?.wahlkampftyp);
       if (!districts.length) {
         pendingEntries.delete(key);
         return interaction.update({ content: '❌ Lege zuerst Wahlkreise an: `/wahlkreis hinzufügen`', components: [] });
@@ -512,7 +512,7 @@ module.exports = async function interactionCreate(client, interaction) {
       const entry = await createEntry(client, interaction.guildId, { ...pending, createdBy: interaction.user.id });
 
       if (pending.approvedPosterId) {
-        deleteApprovedPoster(pending.approvedPosterId);
+        await deleteApprovedPoster(pending.approvedPosterId);
       }
 
       if (isPoster && !pending.imageUrl) {
@@ -590,19 +590,17 @@ module.exports = async function interactionCreate(client, interaction) {
         });
       }
 
-      const settings = getGuildSettings(interaction.guildId);
+      const settings = await getGuildSettings(interaction.guildId);
       if (!settings?.plakatReviewChannelId) {
         return interaction.reply({ content: '❌ Kein Prüfungskanal konfiguriert. Bitte wende dich an einen Admin.', ephemeral: true });
       }
 
-      // Wahlkreis-Auswahl: nur nicht-rote anzeigen
-      const districts = listDistricts(interaction.guildId, settings?.wahlkampftyp);
+      const districts = await listDistricts(interaction.guildId, settings?.wahlkampftyp);
       const available = districts.filter(d => d.status !== 'red');
       if (districts.length > 0 && available.length === 0) {
         return interaction.reply({ content: '❌ Aktuell sind alle Wahlkreise gesperrt 🔴. Es werden keine Plakate mehr benötigt.', ephemeral: true });
       }
 
-      // Wahlkreis abfragen wenn welche vorhanden
       if (available.length > 0) {
         const pendingKey = `plakat:${interaction.user.id}:${interaction.guildId}`;
         pendingEntries.set(pendingKey, { imageUrl, bgSource });
@@ -618,8 +616,7 @@ module.exports = async function interactionCreate(client, interaction) {
         });
       }
 
-      // Kein Wahlkreis vorhanden → direkt senden ohne Wahlkreis
-      const request = addPosterRequest(interaction.guildId, interaction.user.id, imageUrl, bgSource, true);
+      const request = await addPosterRequest(interaction.guildId, interaction.user.id, imageUrl, bgSource, true);
       const reviewChannel = await client.channels.fetch(settings.plakatReviewChannelId).catch(() => null);
       if (!reviewChannel) return interaction.reply({ content: '❌ Prüfungskanal nicht gefunden.', ephemeral: true });
 
@@ -644,7 +641,7 @@ module.exports = async function interactionCreate(client, interaction) {
       );
 
       await reviewChannel.send({ embeds: [embed], components: [row] });
-      return interaction.reply({ content: `✅ Deine Plakatanfrage wurde eingereicht! Bei Annahme erhältst du **${getGuildSettings(interaction.guildId)?.pointsPoster ?? 3} Punkt${(getGuildSettings(interaction.guildId)?.pointsPoster ?? 3) !== 1 ? 'e' : ''}**.`, ephemeral: true });
+      return interaction.reply({ content: `✅ Deine Plakatanfrage wurde eingereicht! Bei Annahme erhältst du **${(await getGuildSettings(interaction.guildId))?.pointsPoster ?? 3} Punkt${((await getGuildSettings(interaction.guildId))?.pointsPoster ?? 3) !== 1 ? 'e' : ''}**.`, ephemeral: true });
     }
 
     // Annehmen/Ablehnen mit Grund Modal
@@ -652,20 +649,20 @@ module.exports = async function interactionCreate(client, interaction) {
       const requestId = rest[1];
       const reason = interaction.fields.getTextInputValue('reason');
       const isApprove = action === 'approvereason';
-      const request = getPosterRequest(requestId);
+      const request = await getPosterRequest(requestId);
       if (!request) return interaction.reply({ content: '❌ Anfrage nicht gefunden.', ephemeral: true });
 
-      updatePosterRequest(requestId, { status: isApprove ? 'approved' : 'rejected', reviewNote: reason });
+      await updatePosterRequest(requestId, { status: isApprove ? 'approved' : 'rejected', reviewNote: reason });
 
       if (isApprove) {
-        const settings = getGuildSettings(interaction.guildId);
+        const settings = await getGuildSettings(interaction.guildId);
         if (settings?.imageStoreChannelId) {
           const storeChannel = await client.channels.fetch(settings.imageStoreChannelId).catch(() => null);
           if (storeChannel) await storeChannel.send({ content: `🖼️ Angenommenes Plakat von <@${request.userId}>\n${request.imageUrl}` }).catch(() => {});
         }
-        addApprovedPoster(interaction.guildId, request.imageUrl, request.userId);
+        await addApprovedPoster(interaction.guildId, request.imageUrl, request.userId);
         const pts2 = settings?.pointsPoster ?? 3;
-        addPoints(interaction.guildId, request.userId, pts2, 'Wahlplakat angenommen');
+        await addPoints(interaction.guildId, request.userId, pts2, 'Wahlplakat angenommen');
       }
 
       // Anfrage-Nachricht aktualisieren
@@ -722,21 +719,21 @@ module.exports = async function interactionCreate(client, interaction) {
     if (interaction.customId.startsWith('plakat:approve:')) {
       if (!await hasVorstandRole(interaction)) return interaction.reply({ content: '❌ Keine Berechtigung.', ephemeral: true });
       const requestId = interaction.customId.replace('plakat:approve:', '');
-      const request = getPosterRequest(requestId);
+      const request = await getPosterRequest(requestId);
       if (!request) return interaction.reply({ content: '❌ Anfrage nicht gefunden.', ephemeral: true });
 
-      updatePosterRequest(requestId, { status: 'approved' });
+      await updatePosterRequest(requestId, { status: 'approved' });
 
-      const settings = getGuildSettings(guildId);
+      const settings = await getGuildSettings(guildId);
       if (settings?.imageStoreChannelId) {
         const storeChannel = await client.channels.fetch(settings.imageStoreChannelId).catch(() => null);
         if (storeChannel) {
           await storeChannel.send({ content: `🖼️ Angenommenes Plakat von <@${request.userId}>\n${request.imageUrl}` }).catch(() => {});
         }
       }
-      addApprovedPoster(guildId, request.imageUrl, request.userId);
-      const pts = getGuildSettings(guildId)?.pointsPoster ?? 3;
-      addPoints(guildId, request.userId, pts, 'Wahlplakat angenommen');
+      await addApprovedPoster(guildId, request.imageUrl, request.userId);
+      const pts = (await getGuildSettings(guildId))?.pointsPoster ?? 3;
+      await addPoints(guildId, request.userId, pts, 'Wahlplakat angenommen');
 
       await interaction.message.edit({
         embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x57F287).setFooter({ text: `✅ Angenommen von ${interaction.user.tag}` })],
@@ -750,10 +747,10 @@ module.exports = async function interactionCreate(client, interaction) {
     if (interaction.customId.startsWith('plakat:reject:')) {
       if (!await hasVorstandRole(interaction)) return interaction.reply({ content: '❌ Keine Berechtigung.', ephemeral: true });
       const requestId = interaction.customId.replace('plakat:reject:', '');
-      const request = getPosterRequest(requestId);
+      const request = await getPosterRequest(requestId);
       if (!request) return interaction.reply({ content: '❌ Anfrage nicht gefunden.', ephemeral: true });
 
-      updatePosterRequest(requestId, { status: 'rejected' });
+      await updatePosterRequest(requestId, { status: 'rejected' });
 
       await interaction.message.edit({
         embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0xED4245).setFooter({ text: `❌ Abgelehnt von ${interaction.user.tag}` })],
@@ -799,7 +796,7 @@ module.exports = async function interactionCreate(client, interaction) {
     }
 
     if (interaction.customId === 'entry:submit') {
-      const active = getActiveEntry(guildId);
+      const active = await getActiveEntry(guildId);
       if (!active) return interaction.reply({ content: '❌ Keine aktive Aufgabe vorhanden.', ephemeral: true });
       const result = await submitActiveEntry(client, guildId);
       if (result.done) {
@@ -809,7 +806,7 @@ module.exports = async function interactionCreate(client, interaction) {
     }
 
     if (interaction.customId === 'entry:showText') {
-      const active = getActiveEntry(guildId);
+      const active = await getActiveEntry(guildId);
       if (!active) return interaction.reply({ content: '❌ Keine aktive Aufgabe vorhanden.', ephemeral: true });
       return interaction.reply({
         content: `📋 **Text zum Kopieren:**\n\`\`\`\n${active.text}\n\`\`\``,
@@ -819,7 +816,7 @@ module.exports = async function interactionCreate(client, interaction) {
 
     if (interaction.customId === 'entry:finish') {
       if (!await hasVorstandRole(interaction)) return interaction.reply({ content: '❌ Keine Berechtigung.', ephemeral: true });
-      const active = getActiveEntry(guildId);
+      const active = await getActiveEntry(guildId);
       if (!active) return interaction.reply({ content: '❌ Keine aktive Aufgabe vorhanden.', ephemeral: true });
       await finishActiveEntry(client, guildId);
       return interaction.reply({ content: '✅ Als erledigt markiert.', ephemeral: true });
@@ -827,7 +824,7 @@ module.exports = async function interactionCreate(client, interaction) {
 
     if (interaction.customId === 'entry:delete') {
       if (!await hasVorstandRole(interaction)) return interaction.reply({ content: '❌ Keine Berechtigung.', ephemeral: true });
-      const active = getActiveEntry(guildId);
+      const active = await getActiveEntry(guildId);
       if (!active) return interaction.reply({ content: '❌ Keine aktive Aufgabe vorhanden.', ephemeral: true });
       await deleteEntryById(client, guildId, active.id);
       return interaction.reply({ content: '🗑️ Eintrag gelöscht.', ephemeral: true });
@@ -835,7 +832,7 @@ module.exports = async function interactionCreate(client, interaction) {
 
     if (interaction.customId === 'entry:priorityUp') {
       if (!await hasVorstandRole(interaction)) return interaction.reply({ content: '❌ Keine Berechtigung.', ephemeral: true });
-      const queue = getQueuedEntries(guildId);
+      const queue = await getQueuedEntries(guildId);
       if (queue.length < 2) return interaction.reply({ content: 'Nicht genug Einträge.', ephemeral: true });
       await moveEntryUp(client, guildId, queue[1].id);
       return interaction.reply({ content: '⬆ Verschoben.', ephemeral: true });
@@ -843,7 +840,7 @@ module.exports = async function interactionCreate(client, interaction) {
 
     if (interaction.customId === 'entry:priorityDown') {
       if (!await hasVorstandRole(interaction)) return interaction.reply({ content: '❌ Keine Berechtigung.', ephemeral: true });
-      const queue = getQueuedEntries(guildId);
+      const queue = await getQueuedEntries(guildId);
       if (queue.length < 2) return interaction.reply({ content: 'Nicht genug Einträge.', ephemeral: true });
       await moveEntryDown(client, guildId, queue[0].id);
       return interaction.reply({ content: '⬇ Verschoben.', ephemeral: true });

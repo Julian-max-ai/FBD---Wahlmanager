@@ -1,10 +1,10 @@
 const { getActiveEntry, getQueuedEntries, addEntry, updateEntry, deleteEntry, getEntry, incrementSubmission } = require('../database/entries');
 const { getGuildSettings, setActiveEntry } = require('../database/settings');
 const { listDistricts } = require('../database/districts');
-const { renderPanel, renderCampaign, renderEnded, buildArchiveEmbed } = require('./panelManager');
+const { renderPanel, renderCampaign, buildArchiveEmbed } = require('./panelManager');
 
 async function createEntry(client, guildId, payload) {
-  const entry = addEntry({
+  const entry = await addEntry({
     guildId,
     type: payload.type,
     title: payload.title || '',
@@ -16,11 +16,10 @@ async function createEntry(client, guildId, payload) {
     createdAt: Date.now(),
   });
 
-  // Wenn noch kein aktiver Eintrag → diesen direkt aktivieren
-  const active = getActiveEntry(guildId);
+  const active = await getActiveEntry(guildId);
   if (!active) {
-    updateEntry(entry.id, { status: 'active' });
-    setActiveEntry(guildId, entry.id);
+    await updateEntry(entry.id, { status: 'active' });
+    await setActiveEntry(guildId, entry.id);
   }
 
   await renderPanel(client, guildId);
@@ -28,9 +27,8 @@ async function createEntry(client, guildId, payload) {
   return entry;
 }
 
-// Wartet bis zu 2 Minuten auf ein Bild im Vorstandskanal und speichert die Discord CDN URL
 async function awaitAndAttachImage(client, guildId, entryId, userId) {
-  const settings = getGuildSettings(guildId);
+  const settings = await getGuildSettings(guildId);
   if (!settings?.vorstandChannelId) return null;
   const channel = await client.channels.fetch(settings.vorstandChannelId).catch(() => null);
   if (!channel) return null;
@@ -46,32 +44,27 @@ async function awaitAndAttachImage(client, guildId, entryId, userId) {
   const msg = collected.first();
   const attachment = msg.attachments.first();
 
-  // Bild in Bildspeicher-Kanal reposten damit URL permanent bleibt
   let url = attachment.url;
   if (settings?.imageStoreChannelId) {
     const storeChannel = await client.channels.fetch(settings.imageStoreChannelId).catch(() => null);
     if (storeChannel) {
-      const stored = await storeChannel.send({
-        files: [{ attachment: attachment.url, name: attachment.name }],
-      }).catch(() => null);
+      const stored = await storeChannel.send({ files: [{ attachment: attachment.url, name: attachment.name }] }).catch(() => null);
       if (stored) url = stored.attachments.first()?.url || url;
     }
   }
 
-  // Original im Vorstandskanal löschen
   await msg.delete().catch(() => {});
-
-  updateEntry(entryId, { imageUrl: url });
+  await updateEntry(entryId, { imageUrl: url });
   await renderPanel(client, guildId);
   await renderCampaign(client, guildId);
   return url;
 }
 
 async function submitActiveEntry(client, guildId) {
-  const active = getActiveEntry(guildId);
+  const active = await getActiveEntry(guildId);
   if (!active) return null;
 
-  const maxReached = incrementSubmission(active.id);
+  const maxReached = await incrementSubmission(active.id);
 
   if (maxReached) {
     await archiveAndAdvance(client, guildId, active);
@@ -80,12 +73,12 @@ async function submitActiveEntry(client, guildId) {
     await renderCampaign(client, guildId);
   }
 
-  const updated = getEntry(active.id);
+  const updated = await getEntry(active.id);
   return { done: maxReached, count: updated?.submissionCount ?? active.submissionCount + 1, max: active.maxSubmissions };
 }
 
 async function finishActiveEntry(client, guildId) {
-  const active = getActiveEntry(guildId);
+  const active = await getActiveEntry(guildId);
   if (!active) return null;
   await archiveAndAdvance(client, guildId, active);
   return active;
@@ -93,33 +86,33 @@ async function finishActiveEntry(client, guildId) {
 
 async function archiveAndAdvance(client, guildId, entry) {
   const finishedAt = Date.now();
-  updateEntry(entry.id, { status: 'finished', finishedAt });
-  const freshEntry = getEntry(entry.id);
+  await updateEntry(entry.id, { status: 'finished', finishedAt });
+  const freshEntry = await getEntry(entry.id);
   await sendToArchive(client, guildId, { ...freshEntry, finishedAt });
   await activateNextEntry(client, guildId);
 }
 
 async function sendToArchive(client, guildId, entry) {
-  const settings = getGuildSettings(guildId);
+  const settings = await getGuildSettings(guildId);
   if (!settings?.archiveChannelId) return;
   const channel = await client.channels.fetch(settings.archiveChannelId).catch(() => null);
   if (!channel) return;
 
-  const districts = listDistricts(guildId);
+  const districts = await listDistricts(guildId);
   const districtStr = districts.find(d => d.id === entry.districtId)?.name || '—';
   const embed = buildArchiveEmbed(entry, districtStr, settings);
   await channel.send({ embeds: [embed] });
 }
 
 async function activateNextEntry(client, guildId) {
-  const queued = getQueuedEntries(guildId);
+  const queued = await getQueuedEntries(guildId);
   const next = queued[0] || null;
 
   if (next) {
-    updateEntry(next.id, { status: 'active' });
-    setActiveEntry(guildId, next.id);
+    await updateEntry(next.id, { status: 'active' });
+    await setActiveEntry(guildId, next.id);
   } else {
-    setActiveEntry(guildId, null);
+    await setActiveEntry(guildId, null);
   }
 
   await renderPanel(client, guildId);
@@ -127,10 +120,10 @@ async function activateNextEntry(client, guildId) {
 }
 
 async function deleteEntryById(client, guildId, entryId) {
-  const entry = getEntry(entryId);
+  const entry = await getEntry(entryId);
   if (!entry) return null;
   const wasActive = entry.status === 'active';
-  deleteEntry(entryId);
+  await deleteEntry(entryId);
   if (wasActive) {
     await activateNextEntry(client, guildId);
   } else {
@@ -140,11 +133,4 @@ async function deleteEntryById(client, guildId, entryId) {
   return entry;
 }
 
-module.exports = {
-  createEntry,
-  awaitAndAttachImage,
-  submitActiveEntry,
-  finishActiveEntry,
-  activateNextEntry,
-  deleteEntryById,
-};
+module.exports = { createEntry, awaitAndAttachImage, submitActiveEntry, finishActiveEntry, activateNextEntry, deleteEntryById };
