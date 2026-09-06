@@ -35,6 +35,7 @@ client.on('interactionCreate', async interaction => {
   await interactionHandler(client, interaction);
 });
 
+console.log('Versuche Login...');
 client.login(BOT_TOKEN)
   .then(() => console.log('Login erfolgreich'))
-  .catch(err => console.error('Login Fehler:', err));
+  .catch(err => { console.error('Login Fehler:', err); process.exit(1); });
