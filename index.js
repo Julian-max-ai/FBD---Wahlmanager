@@ -5,8 +5,10 @@ const { Client, GatewayIntentBits, Collection, Partials } = require('discord.js'
 const { BOT_TOKEN } = require('./src/utils/config');
 
 http.createServer((req, res) => res.end('Bot läuft.')).listen(process.env.PORT || 3000);
+console.log('HTTP Server gestartet');
 
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN is required.');
+console.log('BOT_TOKEN vorhanden:', !!BOT_TOKEN);
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
