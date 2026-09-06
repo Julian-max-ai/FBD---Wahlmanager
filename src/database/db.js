@@ -1,15 +1,22 @@
 const { createClient } = require('@libsql/client');
 
-const turso = createClient({
-  url: process.env.TURSO_DATABASE_URL,
-  authToken: process.env.TURSO_AUTH_TOKEN,
-});
+let turso;
+function getClient() {
+  if (!turso) {
+    turso = createClient({
+      url: process.env.TURSO_DATABASE_URL,
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    });
+  }
+  return turso;
+}
 
 // Sync-kompatibler Wrapper: führt SQL sofort aus und gibt Promise zurück
 // Alle DB-Dateien nutzen db.prepare().get/run/all — wir ersetzen das durch async Funktionen
 // die wir in den DB-Dateien direkt aufrufen
 
 async function initializeDatabase() {
+  const turso = getClient();
   await turso.executeMultiple(`
     CREATE TABLE IF NOT EXISTS guild_settings (
       guildId TEXT PRIMARY KEY,
@@ -83,12 +90,12 @@ async function initializeDatabase() {
 }
 
 async function query(sql, args = []) {
-  const res = await turso.execute({ sql, args });
+  const res = await getClient().execute({ sql, args });
   return res.rows;
 }
 
 async function run(sql, args = []) {
-  await turso.execute({ sql, args });
+  await getClient().execute({ sql, args });
 }
 
-module.exports = { turso, initializeDatabase, query, run };
+module.exports = { get turso() { return getClient(); }, initializeDatabase, query, run };
