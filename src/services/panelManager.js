@@ -58,7 +58,6 @@ async function renderPanel(client, guildId) {
   if (!settings?.vorstandChannelId) return;
   const channel = await client.channels.fetch(settings.vorstandChannelId).catch(() => null);
   if (!channel) return;
-
   const active = await getActiveEntry(guildId);
   const queue = await getQueuedEntries(guildId);
   const districts = await listDistricts(guildId, settings.wahlkampftyp);
@@ -149,7 +148,6 @@ async function renderCampaign(client, guildId) {
   if (!settings?.campaignChannelId) return;
   const channel = await client.channels.fetch(settings.campaignChannelId).catch(() => null);
   if (!channel) return;
-
   const active = await getActiveEntry(guildId);
   const queue = await getQueuedEntries(guildId);
   const districts = await listDistricts(guildId, settings.wahlkampftyp);
@@ -283,7 +281,6 @@ async function renderPlakatPanel(client, guildId) {
   if (!settings?.plakatRequestChannelId) return;
   const channel = await client.channels.fetch(settings.plakatRequestChannelId).catch(() => null);
   if (!channel) return;
-
   const districts = await listDistricts(guildId, settings.wahlkampftyp);
   const statusEmoji = { green: '🟢', yellow: '🟡', red: '🔴' };
   const statusText = { green: 'Noch viele gebraucht', yellow: 'Wenige gebraucht', red: 'Gesperrt' };

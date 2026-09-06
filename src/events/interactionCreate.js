@@ -8,7 +8,7 @@ const { listDistricts, addDistrict, updateDistrict, deleteDistrict, updateDistri
 const { getActiveEntry, getQueuedEntries } = require('../database/entries');
 const { renderPanel, renderCampaign, renderEnded, renderPlakatPanel } = require('../services/panelManager');
 const { createEntry, awaitAndAttachImage, submitActiveEntry, finishActiveEntry, deleteEntryById } = require('../services/campaignManager');
-const { db } = require('../database/db');
+const { run } = require('../database/db');
 const { moveEntryUp, moveEntryDown } = require('../services/queueManager');
 const { addPosterRequest, getPosterRequest, updatePosterRequest, addApprovedPoster, getApprovedPosters, deleteApprovedPoster } = require('../database/posterRequests');
 const { addPoints, getLeaderboard } = require('../database/activity');
@@ -72,9 +72,6 @@ async function handleWahlkampfErstellen(interaction) {
     return interaction.reply({ content: '❌ Nur Administratoren können einen Wahlkampf starten.', ephemeral: true });
   }
   const settings = await getGuildSettings(interaction.guildId);
-  if (!settings?.vorstandRoleId) {
-    return interaction.reply({ content: '❌ Führe zuerst `/setup` aus um den Bot zu konfigurieren.', ephemeral: true });
-  }
   await interaction.reply({
     content: '**Wahlkampf erstellen (1/1):** Welche Wahl wird vorbereitet?',
     components: [new ActionRowBuilder().addComponents(
@@ -165,7 +162,7 @@ module.exports = async function interactionCreate(client, interaction) {
           const typName = typ === 'bundestag' ? 'Bundestagswahlkampf' : 'Landtagswahlkampf';
           return interaction.reply({ content: `❌ Kein aktiver **${typName}** gefunden.`, ephemeral: true });
         }
-        db.execute({ sql: "UPDATE entries SET status = 'finished', finishedAt = ? WHERE guildId = ? AND status != 'finished'", args: [Date.now(), interaction.guildId] });
+        await run("UPDATE entries SET status='finished',finishedAt=? WHERE guildId=? AND status!='finished'", [Date.now(), interaction.guildId]);
         await renderEnded(client, interaction.guildId);
         await updateGuildSettings(interaction.guildId, { activeEntryId: null, wahlkampftyp: null });
         const typName = typ === 'bundestag' ? 'Bundestagswahlkampf' : 'Landtagswahlkampf';
@@ -243,7 +240,6 @@ module.exports = async function interactionCreate(client, interaction) {
     if (scope === 'mainsetup') {
       const existing = await getGuildSettings(interaction.guildId) || { guildId: interaction.guildId };
       const settings = { ...existing };
-
       if (action === 'role') {
         settings.vorstandRoleId = interaction.values[0];
         await saveGuildSettings(settings);
@@ -375,7 +371,7 @@ module.exports = async function interactionCreate(client, interaction) {
       );
 
       await reviewChannel.send({ embeds: [embed], components: [row] });
-      return interaction.update({ content: `✅ Deine Plakatanfrage wurde eingereicht! Bei Annahme erhältst du **${(await getGuildSettings(interaction.guildId))?.pointsPoster ?? 3} Punkt${((await getGuildSettings(interaction.guildId))?.pointsPoster ?? 3) !== 1 ? 'e' : ''}**.`, components: [] });
+      return interaction.update({ content: `✅ Deine Plakatanfrage wurde eingereicht! Bei Annahme erhältst du **${(await getGuildSettings(interaction.guildId))?.pointsPoster ?? 3} Punkte**.`, components: [] });
     }
 
     // ── Wahlkreis Status ──
@@ -592,9 +588,8 @@ module.exports = async function interactionCreate(client, interaction) {
 
       const settings = await getGuildSettings(interaction.guildId);
       if (!settings?.plakatReviewChannelId) {
-        return interaction.reply({ content: '❌ Kein Prüfungskanal konfiguriert. Bitte wende dich an einen Admin.', ephemeral: true });
+        return interaction.reply({ content: '❌ Kein Prüfungskanal konfiguriert.', ephemeral: true });
       }
-
       const districts = await listDistricts(interaction.guildId, settings?.wahlkampftyp);
       const available = districts.filter(d => d.status !== 'red');
       if (districts.length > 0 && available.length === 0) {
@@ -641,7 +636,7 @@ module.exports = async function interactionCreate(client, interaction) {
       );
 
       await reviewChannel.send({ embeds: [embed], components: [row] });
-      return interaction.reply({ content: `✅ Deine Plakatanfrage wurde eingereicht! Bei Annahme erhältst du **${(await getGuildSettings(interaction.guildId))?.pointsPoster ?? 3} Punkt${((await getGuildSettings(interaction.guildId))?.pointsPoster ?? 3) !== 1 ? 'e' : ''}**.`, ephemeral: true });
+      return interaction.reply({ content: `✅ Deine Plakatanfrage wurde eingereicht! Bei Annahme erhältst du **${(await getGuildSettings(interaction.guildId))?.pointsPoster ?? 3} Punkte**.`, ephemeral: true });
     }
 
     // Annehmen/Ablehnen mit Grund Modal
@@ -727,9 +722,7 @@ module.exports = async function interactionCreate(client, interaction) {
       const settings = await getGuildSettings(guildId);
       if (settings?.imageStoreChannelId) {
         const storeChannel = await client.channels.fetch(settings.imageStoreChannelId).catch(() => null);
-        if (storeChannel) {
-          await storeChannel.send({ content: `🖼️ Angenommenes Plakat von <@${request.userId}>\n${request.imageUrl}` }).catch(() => {});
-        }
+        if (storeChannel) await storeChannel.send({ content: `🖼️ Angenommenes Plakat von <@${request.userId}>\n${request.imageUrl}` }).catch(() => {});
       }
       await addApprovedPoster(guildId, request.imageUrl, request.userId);
       const pts = (await getGuildSettings(guildId))?.pointsPoster ?? 3;

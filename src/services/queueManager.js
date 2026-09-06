@@ -5,25 +5,19 @@ async function moveEntryUp(client, guildId, entryId) {
   const queue = await getQueuedEntries(guildId);
   const idx = queue.findIndex(e => e.id === entryId);
   if (idx <= 0) return false;
-  const above = queue[idx - 1];
-  const current = queue[idx];
-  await updateEntry(above.id, { queuePosition: current.queuePosition });
-  await updateEntry(current.id, { queuePosition: above.queuePosition });
-  await renderPanel(client, guildId);
-  await renderCampaign(client, guildId);
+  await updateEntry(queue[idx-1].id, { queuePosition: queue[idx].queuePosition });
+  await updateEntry(queue[idx].id, { queuePosition: queue[idx-1].queuePosition });
+  await renderPanel(client, guildId); await renderCampaign(client, guildId);
   return true;
 }
 
 async function moveEntryDown(client, guildId, entryId) {
   const queue = await getQueuedEntries(guildId);
   const idx = queue.findIndex(e => e.id === entryId);
-  if (idx < 0 || idx >= queue.length - 1) return false;
-  const below = queue[idx + 1];
-  const current = queue[idx];
-  await updateEntry(below.id, { queuePosition: current.queuePosition });
-  await updateEntry(current.id, { queuePosition: below.queuePosition });
-  await renderPanel(client, guildId);
-  await renderCampaign(client, guildId);
+  if (idx < 0 || idx >= queue.length-1) return false;
+  await updateEntry(queue[idx+1].id, { queuePosition: queue[idx].queuePosition });
+  await updateEntry(queue[idx].id, { queuePosition: queue[idx+1].queuePosition });
+  await renderPanel(client, guildId); await renderCampaign(client, guildId);
   return true;
 }
 

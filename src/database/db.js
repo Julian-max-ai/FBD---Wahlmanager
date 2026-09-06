@@ -1,12 +1,16 @@
 const { createClient } = require('@libsql/client');
 
-const db = createClient({
+const turso = createClient({
   url: process.env.TURSO_DATABASE_URL,
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
+// Sync-kompatibler Wrapper: führt SQL sofort aus und gibt Promise zurück
+// Alle DB-Dateien nutzen db.prepare().get/run/all — wir ersetzen das durch async Funktionen
+// die wir in den DB-Dateien direkt aufrufen
+
 async function initializeDatabase() {
-  await db.executeMultiple(`
+  await turso.executeMultiple(`
     CREATE TABLE IF NOT EXISTS guild_settings (
       guildId TEXT PRIMARY KEY,
       wahlkampftyp TEXT,
@@ -24,7 +28,6 @@ async function initializeDatabase() {
       pointsPoster INTEGER NOT NULL DEFAULT 3,
       pointsSpeech INTEGER NOT NULL DEFAULT 5
     );
-
     CREATE TABLE IF NOT EXISTS activity_points (
       id TEXT PRIMARY KEY,
       guildId TEXT NOT NULL,
@@ -33,7 +36,6 @@ async function initializeDatabase() {
       reason TEXT NOT NULL,
       createdAt INTEGER NOT NULL
     );
-
     CREATE TABLE IF NOT EXISTS wahlkreise (
       id TEXT PRIMARY KEY,
       guildId TEXT NOT NULL,
@@ -42,7 +44,6 @@ async function initializeDatabase() {
       position INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'green'
     );
-
     CREATE TABLE IF NOT EXISTS poster_requests (
       id TEXT PRIMARY KEY,
       guildId TEXT NOT NULL,
@@ -54,7 +55,6 @@ async function initializeDatabase() {
       reviewNote TEXT,
       createdAt INTEGER NOT NULL
     );
-
     CREATE TABLE IF NOT EXISTS approved_posters (
       id TEXT PRIMARY KEY,
       guildId TEXT NOT NULL,
@@ -62,7 +62,6 @@ async function initializeDatabase() {
       submittedBy TEXT NOT NULL,
       createdAt INTEGER NOT NULL
     );
-
     CREATE TABLE IF NOT EXISTS entries (
       id TEXT PRIMARY KEY,
       guildId TEXT NOT NULL,
@@ -83,4 +82,13 @@ async function initializeDatabase() {
   `);
 }
 
-module.exports = { db, initializeDatabase };
+async function query(sql, args = []) {
+  const res = await turso.execute({ sql, args });
+  return res.rows;
+}
+
+async function run(sql, args = []) {
+  await turso.execute({ sql, args });
+}
+
+module.exports = { turso, initializeDatabase, query, run };
