@@ -17,10 +17,13 @@ const client = new Client({
 
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, 'src', 'commands');
+console.log('Lade Commands...');
 for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
   const command = require(path.join(commandsPath, file));
   client.commands.set(command.data.name, command);
+  console.log('Command geladen:', command.data.name);
 }
+console.log('Commands geladen, starte Login...');
 
 client.once('ready', async () => {
   const readyHandler = require('./src/events/ready');
