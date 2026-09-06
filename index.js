@@ -10,6 +10,7 @@ console.log('HTTP Server gestartet');
 if (!BOT_TOKEN) throw new Error('BOT_TOKEN is required.');
 console.log('BOT_TOKEN vorhanden:', !!BOT_TOKEN);
 console.log('BOT_TOKEN Länge:', BOT_TOKEN.length);
+console.log('BOT_TOKEN Start:', BOT_TOKEN.substring(0, 10));
 console.log('TURSO_URL vorhanden:', !!process.env.TURSO_DATABASE_URL);
 console.log('TURSO_TOKEN vorhanden:', !!process.env.TURSO_AUTH_TOKEN);
 
@@ -42,7 +43,7 @@ console.log('Versuche Login...');
 const loginTimeout = setTimeout(() => {
   console.error('Login Timeout nach 15s — Token ungültig oder Discord nicht erreichbar');
   process.exit(1);
-}, 15000);
+}, 10000);
 
 client.login(BOT_TOKEN)
   .then(() => { clearTimeout(loginTimeout); console.log('Login erfolgreich'); })
