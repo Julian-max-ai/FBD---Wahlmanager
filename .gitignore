@@ -7,6 +7,8 @@ KI CHAT/
 # VS Code History Dateien im Root ignorieren
 [0-9A-Za-z][0-9A-Za-z][0-9A-Za-z][0-9A-Za-z].js
 [0-9A-Za-z][0-9A-Za-z][0-9A-Za-z][0-9A-Za-z][0-9A-Za-z].js
+!index.js
+!src/events/ready.js
 timetable.js.js
 entries.json
 WetterVorhersage.js
