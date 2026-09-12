@@ -52,14 +52,44 @@ async function handleMainSetupStart(interaction) {
   if (!interaction.memberPermissions?.has('Administrator')) {
     return interaction.reply({ content: '❌ Nur Administratoren dürfen das Setup ausführen.', ephemeral: true });
   }
-  const roles = roleOptions(interaction);
-  if (!roles.length) {
-    return interaction.reply({ content: '❌ Keine Rollen gefunden.', ephemeral: true });
-  }
-  await interaction.reply({
-    content: '**Haupt-Setup (1/7):** Wähle die **Vorstandsrolle**.',
+  const settings = await getGuildSettings(interaction.guildId);
+  const ch = interaction.guild.channels.cache;
+  const ro = interaction.guild.roles.cache;
+  const name = id => id ? (ch.get(id)?.name || ro.get(id)?.name || id) : '*nicht gesetzt*';
+
+  const lines = [
+    `**Aktuelle Einstellungen:**`,
+    `1\ufe0f⃣ Vorstandsrolle: ${settings?.vorstandRoleId ? `<@&${settings.vorstandRoleId}>` : '*nicht gesetzt*'}`,
+    `2\ufe0f⃣ Vorstandskanal: ${settings?.vorstandChannelId ? `<#${settings.vorstandChannelId}>` : '*nicht gesetzt*'}`,
+    `3\ufe0f⃣ Wahlkampfkanal: ${settings?.campaignChannelId ? `<#${settings.campaignChannelId}>` : '*nicht gesetzt*'}`,
+    `4\ufe0f⃣ Archivkanal: ${settings?.archiveChannelId ? `<#${settings.archiveChannelId}>` : '*nicht gesetzt*'}`,
+    `5\ufe0f⃣ Bildspeicher-Kanal: ${settings?.imageStoreChannelId ? `<#${settings.imageStoreChannelId}>` : '*nicht gesetzt*'}`,
+    `6\ufe0f⃣ Plakatanfragen-Kanal: ${settings?.plakatRequestChannelId ? `<#${settings.plakatRequestChannelId}>` : '*nicht gesetzt*'}`,
+    `7\ufe0f⃣ Plakatprüfungs-Kanal: ${settings?.plakatReviewChannelId ? `<#${settings.plakatReviewChannelId}>` : '*nicht gesetzt*'}`,
+    `8\ufe0f⃣ Punkte Plakat: **${settings?.pointsPoster ?? 3}**`,
+    `9\ufe0f⃣ Punkte Rede: **${settings?.pointsSpeech ?? 5}**`,
+    ``,
+    `Was möchtest du ändern?`,
+  ];
+
+  const options = [
+    { label: '1️⃣ Vorstandsrolle', value: 'role' },
+    { label: '2️⃣ Vorstandskanal', value: 'ch:vorstand' },
+    { label: '3️⃣ Wahlkampfkanal', value: 'ch:campaign' },
+    { label: '4️⃣ Archivkanal', value: 'ch:archive' },
+    { label: '5️⃣ Bildspeicher-Kanal', value: 'ch:imagestore' },
+    { label: '6️⃣ Plakatanfragen-Kanal', value: 'ch:plakatrequest' },
+    { label: '7️⃣ Plakatprüfungs-Kanal', value: 'ch:plakatreview' },
+    { label: '8️⃣ Punkte Plakat', value: 'pts:poster' },
+    { label: '9️⃣ Punkte Rede', value: 'pts:speech' },
+  ];
+
+  return interaction.reply({
+    content: lines.join('\n'),
     components: [new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder().setCustomId('mainsetup:role').setPlaceholder('Vorstandsrolle wählen').addOptions(roles)
+      new StringSelectMenuBuilder().setCustomId('mainsetup:edit').setPlaceholder('Einstellung wählen').addOptions(
+        options.map(o => new StringSelectMenuOptionBuilder().setLabel(o.label).setValue(o.value))
+      )
     )],
     ephemeral: true,
   });
@@ -240,50 +270,41 @@ module.exports = async function interactionCreate(client, interaction) {
     if (scope === 'mainsetup') {
       const existing = await getGuildSettings(interaction.guildId) || { guildId: interaction.guildId };
       const settings = { ...existing };
+
+      // Neues Edit-Menü
+      if (action === 'edit') {
+        const val = interaction.values[0];
+        if (val === 'role') {
+          const roles = roleOptions(interaction);
+          return interaction.update({ content: 'Neue **Vorstandsrolle** wählen:', components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('mainsetup:role').setPlaceholder('Rolle wählen').addOptions(roles))] });
+        }
+        if (val.startsWith('ch:')) {
+          const target = val.replace('ch:', '');
+          const labels = { vorstand: 'Vorstandskanal', campaign: 'Wahlkampfkanal', archive: 'Archivkanal', imagestore: 'Bildspeicher-Kanal', plakatrequest: 'Plakatanfragen-Kanal', plakatreview: 'Plakatprüfungs-Kanal' };
+          return channelSelectStep(interaction, `mainsetup:channel:${target}`, `Neuen **${labels[target]}** wählen:`);
+        }
+        if (val === 'pts:poster') {
+          return interaction.update({ content: 'Neue **Punkte für Wahlplakat** wählen:', components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('mainsetup:points:poster').setPlaceholder('Punkte wählen').addOptions([1,2,3,4,5,6,7,8,9,10].map(n => new StringSelectMenuOptionBuilder().setLabel(`${n} Punkt${n>1?'e':''}`).setValue(String(n)))))] });
+        }
+        if (val === 'pts:speech') {
+          return interaction.update({ content: 'Neue **Punkte für Rede** wählen:', components: [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('mainsetup:points:speech').setPlaceholder('Punkte wählen').addOptions([1,2,3,4,5,6,7,8,9,10].map(n => new StringSelectMenuOptionBuilder().setLabel(`${n} Punkt${n>1?'e':''}`).setValue(String(n)))))] });
+        }
+      }
+
       if (action === 'role') {
         settings.vorstandRoleId = interaction.values[0];
         await saveGuildSettings(settings);
-        return channelSelectStep(interaction, 'mainsetup:channel:vorstand', '**Haupt-Setup (2/9):** Wähle den **Vorstandskanal**.');
+        return interaction.update({ content: '✅ Vorstandsrolle gespeichert.', components: [] });
       }
       if (action === 'channel') {
         const target = rest[0];
         const updated = await getGuildSettings(interaction.guildId) || { guildId: interaction.guildId };
-        if (target === 'vorstand') {
-          updated.vorstandChannelId = interaction.values[0];
+        const fieldMap = { vorstand: 'vorstandChannelId', campaign: 'campaignChannelId', archive: 'archiveChannelId', imagestore: 'imageStoreChannelId', plakatrequest: 'plakatRequestChannelId', plakatreview: 'plakatReviewChannelId' };
+        if (fieldMap[target]) {
+          updated[fieldMap[target]] = interaction.values[0];
           await saveGuildSettings(updated);
-          return channelSelectStep(interaction, 'mainsetup:channel:campaign', '**Haupt-Setup (3/9):** Wähle den **Wahlkampfkanal**.');
-        }
-        if (target === 'campaign') {
-          updated.campaignChannelId = interaction.values[0];
-          await saveGuildSettings(updated);
-          return channelSelectStep(interaction, 'mainsetup:channel:archive', '**Haupt-Setup (4/9):** Wähle den **Archivkanal**.');
-        }
-        if (target === 'archive') {
-          updated.archiveChannelId = interaction.values[0];
-          await saveGuildSettings(updated);
-          return channelSelectStep(interaction, 'mainsetup:channel:imagestore', '**Haupt-Setup (5/9):** Wähle den **Bildspeicher-Kanal**.');
-        }
-        if (target === 'imagestore') {
-          updated.imageStoreChannelId = interaction.values[0];
-          await saveGuildSettings(updated);
-          return channelSelectStep(interaction, 'mainsetup:channel:plakatrequest', '**Haupt-Setup (6/9):** Wähle den **Plakatanfragen-Kanal**.');
-        }
-        if (target === 'plakatrequest') {
-          updated.plakatRequestChannelId = interaction.values[0];
-          await saveGuildSettings(updated);
-          return channelSelectStep(interaction, 'mainsetup:channel:plakatreview', '**Haupt-Setup (7/9):** Wähle den **Plakatprüfungs-Kanal**.');
-        }
-        if (target === 'plakatreview') {
-          updated.plakatReviewChannelId = interaction.values[0];
-          await saveGuildSettings(updated);
-          return interaction.update({
-            content: '**Haupt-Setup — Punkte (8/9):** Wie viele Punkte für ein angenommenes **Wahlplakat**?',
-            components: [new ActionRowBuilder().addComponents(
-              new StringSelectMenuBuilder().setCustomId('mainsetup:points:poster').setPlaceholder('Punkte wählen').addOptions(
-                [1,2,3,4,5,6,7,8,9,10].map(n => new StringSelectMenuOptionBuilder().setLabel(`${n} Punkt${n>1?'e':''}`).setValue(String(n)))
-              )
-            )],
-          });
+          if (target === 'plakatrequest') await renderPlakatPanel(client, interaction.guildId);
+          return interaction.update({ content: `✅ Kanal gespeichert.`, components: [] });
         }
       }
       if (action === 'points') {
@@ -291,21 +312,12 @@ module.exports = async function interactionCreate(client, interaction) {
         if (rest[0] === 'poster') {
           updated2.pointsPoster = parseInt(interaction.values[0]);
           await saveGuildSettings(updated2);
-          return interaction.update({
-            content: '**Haupt-Setup — Punkte (9/9):** Wie viele Punkte für eine angenommene **Rede**?',
-            components: [new ActionRowBuilder().addComponents(
-              new StringSelectMenuBuilder().setCustomId('mainsetup:points:speech').setPlaceholder('Punkte wählen').addOptions(
-                [1,2,3,4,5,6,7,8,9,10].map(n => new StringSelectMenuOptionBuilder().setLabel(`${n} Punkt${n>1?'e':''}`).setValue(String(n)))
-              )
-            )],
-          });
+          return interaction.update({ content: `✅ Punkte für Plakat gespeichert: **${updated2.pointsPoster}**`, components: [] });
         }
         if (rest[0] === 'speech') {
           updated2.pointsSpeech = parseInt(interaction.values[0]);
           await saveGuildSettings(updated2);
-          await interaction.update({ content: '✅ Haupt-Setup abgeschlossen! Plakatanfragen-Panel wird erstellt...', components: [] });
-          await renderPlakatPanel(client, interaction.guildId);
-          return;
+          return interaction.update({ content: `✅ Punkte für Rede gespeichert: **${updated2.pointsSpeech}**`, components: [] });
         }
       }
     }
@@ -596,8 +608,9 @@ module.exports = async function interactionCreate(client, interaction) {
         return interaction.reply({ content: '❌ Aktuell sind alle Wahlkreise gesperrt 🔴. Es werden keine Plakate mehr benötigt.', ephemeral: true });
       }
 
+      const pendingKey = `plakat:${interaction.user.id}:${interaction.guildId}`;
+
       if (available.length > 0) {
-        const pendingKey = `plakat:${interaction.user.id}:${interaction.guildId}`;
         pendingEntries.set(pendingKey, { imageUrl, bgSource });
         const statusEmoji = { green: '🟢', yellow: '🟡' };
         return interaction.reply({
@@ -611,6 +624,7 @@ module.exports = async function interactionCreate(client, interaction) {
         });
       }
 
+      // Keine Wahlkreise → direkt an Prüfungskanal senden
       const request = await addPosterRequest(interaction.guildId, interaction.user.id, imageUrl, bgSource, true);
       const reviewChannel = await client.channels.fetch(settings.plakatReviewChannelId).catch(() => null);
       if (!reviewChannel) return interaction.reply({ content: '❌ Prüfungskanal nicht gefunden.', ephemeral: true });
@@ -636,7 +650,7 @@ module.exports = async function interactionCreate(client, interaction) {
       );
 
       await reviewChannel.send({ embeds: [embed], components: [row] });
-      return interaction.reply({ content: `✅ Deine Plakatanfrage wurde eingereicht! Bei Annahme erhältst du **${(await getGuildSettings(interaction.guildId))?.pointsPoster ?? 3} Punkte**.`, ephemeral: true });
+      return interaction.reply({ content: `✅ Deine Plakatanfrage wurde eingereicht! Bei Annahme erhältst du **${settings?.pointsPoster ?? 3} Punkte**.`, ephemeral: true });
     }
 
     // Annehmen/Ablehnen mit Grund Modal
