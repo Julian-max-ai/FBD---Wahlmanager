@@ -267,11 +267,15 @@ async function renderEnded(client, guildId) {
 
       if (settings.campaignMessageId) {
         const cm = await cc.messages.fetch(settings.campaignMessageId).catch(() => null);
-        if (cm) { await cm.edit({ embeds: [endEmbed], components: [] }); return; }
+        if (cm) { await cm.edit({ embeds: [endEmbed], components: [] }); }
+        else { await cc.send({ embeds: [endEmbed], components: [] }); }
+      } else {
+        await cc.send({ embeds: [endEmbed], components: [] });
       }
-      await cc.send({ embeds: [endEmbed], components: [] });
     }
   }
+
+  await renderPlakatPanel(client, guildId).catch(() => {});
 }
 
 // ─── PLAKATANFRAGEN PANEL ─────────────────────────────────────────────────────
@@ -281,30 +285,41 @@ async function renderPlakatPanel(client, guildId) {
   if (!settings?.plakatRequestChannelId) return;
   const channel = await client.channels.fetch(settings.plakatRequestChannelId).catch(() => null);
   if (!channel) return;
-  const districts = await listDistricts(guildId, settings.wahlkampftyp);
+
+  const isActive = !!settings.wahlkampftyp;
+  const districts = isActive ? await listDistricts(guildId, settings.wahlkampftyp) : [];
   const statusEmoji = { green: '🟢', yellow: '🟡', red: '🔴' };
   const statusText = { green: 'Noch viele gebraucht', yellow: 'Wenige gebraucht', red: 'Gesperrt' };
-  const districtList = districts.length
-    ? districts.map(d => `${statusEmoji[d.status] || '⚪'} **${d.name}** — ${statusText[d.status] || ''}`).join('\n')
-    : '*Noch keine Wahlkreise erstellt.*';
+  const AREAS = ['hansebund', 'mittelmark'];
+  const AREA_LABELS_LOCAL = { hansebund: '🏙️ Hansebund', mittelmark: '🌿 Mittelmark' };
+
+  let districtField = '';
+  if (!isActive) {
+    districtField = '*Kein aktiver Wahlkampf.*';
+  } else if (!districts.length) {
+    districtField = '*Noch keine Wahlkreise erstellt.*';
+  } else {
+    districtField = AREAS.map(area => {
+      const areaDistricts = districts.filter(d => d.area === area);
+      if (!areaDistricts.length) return null;
+      const lines = areaDistricts.map(d => `${statusEmoji[d.status] || '⚪'} **${d.name}** — ${statusText[d.status] || ''}`);
+      return `**${AREA_LABELS_LOCAL[area]}**\n${lines.join('\n')}`;
+    }).filter(Boolean).join('\n\n');
+  }
 
   const embed = new EmbedBuilder()
-    .setColor(0xEB459E)
+    .setColor(isActive ? 0xEB459E : 0x99AAB5)
     .setTitle('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🖼️  Wahlplakat einreichen\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     .setDescription(
-      '> Hier kannst du ein Wahlplakat beim Vorstand einreichen.\n' +
-      '> Der Vorstand prüft deine Anfrage und gibt sie frei oder lehnt sie ab.\n' +
-      '>\n' +
-      '> **Voraussetzungen:**\n' +
-      '> • Das Bild darf **nicht** urheberrechtlich geschützt sein\n' +
-      '> • Gib die Quelle des Hintergrundbildes an (falls vorhanden)\n' +
-      '> • Nur direkte Bild-URLs (endet auf .png, .jpg, .gif, .webp)'
+      isActive
+        ? '> Hier kannst du ein Wahlplakat beim Vorstand einreichen.\n> Der Vorstand prüft deine Anfrage und gibt sie frei oder lehnt sie ab.\n>\n> **Voraussetzungen:**\n> • Das Bild darf **nicht** urheberrechtlich geschützt sein\n> • Gib die Quelle des Hintergrundbildes an (falls vorhanden)\n> • Nur direkte Bild-URLs (endet auf .png, .jpg, .gif, .webp)'
+        : '> *Aktuell läuft kein Wahlkampf.*\n> Sobald ein neuer Wahlkampf gestartet wird, kannst du hier Plakate einreichen.'
     )
-    .addFields({ name: '📍  Wahlkreis-Status', value: districtList })
+    .addFields({ name: '📍  Wahlkreis-Status', value: districtField })
     .setFooter({ text: 'FBD Wahlkampfverwaltung — Plakatanfragen' }).setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('plakat:request').setLabel('🖼️ Wahlplakat einreichen').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('plakat:request').setLabel('🖼️ Wahlplakat einreichen').setStyle(ButtonStyle.Primary).setDisabled(!isActive),
   );
 
   const payload = { embeds: [embed], components: [row] };

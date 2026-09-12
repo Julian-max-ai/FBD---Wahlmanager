@@ -17,6 +17,9 @@ function getClient() {
 
 async function initializeDatabase() {
   const turso = getClient();
+  // Migrationen
+  await turso.execute("ALTER TABLE wahlkreise ADD COLUMN area TEXT NOT NULL DEFAULT 'hansebund'").catch(() => {});
+  await turso.execute("ALTER TABLE poster_requests ADD COLUMN districtId TEXT").catch(() => {});
   await turso.executeMultiple(`
     CREATE TABLE IF NOT EXISTS guild_settings (
       guildId TEXT PRIMARY KEY,
@@ -49,7 +52,8 @@ async function initializeDatabase() {
       wahlkampftyp TEXT NOT NULL DEFAULT 'bundestag',
       name TEXT NOT NULL,
       position INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'green'
+      status TEXT NOT NULL DEFAULT 'green',
+      area TEXT NOT NULL DEFAULT 'hansebund'
     );
     CREATE TABLE IF NOT EXISTS poster_requests (
       id TEXT PRIMARY KEY,

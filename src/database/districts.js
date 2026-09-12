@@ -1,15 +1,16 @@
 const { randomUUID } = require('crypto');
 const { query, run } = require('./db');
 
-async function listDistricts(guildId, wahlkampftyp) {
+async function listDistricts(guildId, wahlkampftyp, area) {
+  if (wahlkampftyp && area) return query('SELECT * FROM wahlkreise WHERE guildId=? AND wahlkampftyp=? AND area=? ORDER BY position,name', [guildId, wahlkampftyp, area]);
   if (wahlkampftyp) return query('SELECT * FROM wahlkreise WHERE guildId=? AND wahlkampftyp=? ORDER BY position,name', [guildId, wahlkampftyp]);
   return query('SELECT * FROM wahlkreise WHERE guildId=? ORDER BY position,name', [guildId]);
 }
 
-async function addDistrict(guildId, name, wahlkampftyp = 'bundestag') {
+async function addDistrict(guildId, name, wahlkampftyp = 'bundestag', area = 'hansebund') {
   const existing = await listDistricts(guildId, wahlkampftyp);
-  const district = { id: randomUUID(), guildId, wahlkampftyp, name, position: existing.length + 1, status: 'green' };
-  await run('INSERT INTO wahlkreise (id,guildId,wahlkampftyp,name,position,status) VALUES (?,?,?,?,?,?)', [district.id, district.guildId, district.wahlkampftyp, district.name, district.position, district.status]);
+  const district = { id: randomUUID(), guildId, wahlkampftyp, name, position: existing.length + 1, status: 'green', area };
+  await run('INSERT INTO wahlkreise (id,guildId,wahlkampftyp,name,position,status,area) VALUES (?,?,?,?,?,?,?)', [district.id, district.guildId, district.wahlkampftyp, district.name, district.position, district.status, district.area]);
   return district;
 }
 

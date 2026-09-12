@@ -1,10 +1,10 @@
 const { randomUUID } = require('crypto');
 const { query, run } = require('./db');
 
-async function addPosterRequest(guildId, userId, imageUrl, bgSource, copyrightChecked) {
+async function addPosterRequest(guildId, userId, imageUrl, bgSource, copyrightChecked, districtId = null) {
   const id = randomUUID();
-  await run(`INSERT INTO poster_requests (id,guildId,userId,imageUrl,bgSource,copyrightChecked,status,createdAt) VALUES (?,?,?,?,?,?,'pending',?)`,
-    [id, guildId, userId, imageUrl, bgSource||null, copyrightChecked?1:0, Date.now()]);
+  await run(`INSERT INTO poster_requests (id,guildId,userId,imageUrl,bgSource,copyrightChecked,status,createdAt,districtId) VALUES (?,?,?,?,?,?,'pending',?,?)`,
+    [id, guildId, userId, imageUrl, bgSource||null, copyrightChecked?1:0, Date.now(), districtId]);
   return getPosterRequest(id);
 }
 
