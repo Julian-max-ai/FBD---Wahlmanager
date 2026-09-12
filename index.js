@@ -31,7 +31,10 @@ client.once('clientReady', async () => {
 
 client.on('interactionCreate', async interaction => {
   const interactionHandler = require('./src/events/interactionCreate');
-  await interactionHandler(client, interaction);
+  await interactionHandler(client, interaction).catch(err => {
+    if (err?.code === 10062) return; // Interaction abgelaufen, ignorieren
+    console.error('Interaction Fehler:', err);
+  });
 });
 
 console.log('Versuche Login...');
