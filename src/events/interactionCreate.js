@@ -229,8 +229,8 @@ module.exports = async function interactionCreate(client, interaction) {
           return interaction.reply({ content: `❌ Kein aktiver **${typName}** gefunden.`, ephemeral: true });
         }
         await run("UPDATE entries SET status='finished',finishedAt=? WHERE guildId=? AND status!='finished'", [Date.now(), interaction.guildId]);
-        await renderEnded(client, interaction.guildId);
         await updateGuildSettings(interaction.guildId, { activeEntryId: null, wahlkampftyp: null });
+        await renderEnded(client, interaction.guildId);
         const typName = typ === 'bundestag' ? 'Bundestagswahlkampf' : 'Landtagswahlkampf';
         return interaction.reply({ content: `✅ **${typName}** beendet.`, ephemeral: true });
       }
