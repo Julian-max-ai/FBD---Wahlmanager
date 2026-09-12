@@ -20,6 +20,8 @@ async function initializeDatabase() {
   // Migrationen
   await turso.execute("ALTER TABLE wahlkreise ADD COLUMN area TEXT NOT NULL DEFAULT 'hansebund'").catch(() => {});
   await turso.execute("ALTER TABLE poster_requests ADD COLUMN districtId TEXT").catch(() => {});
+  await turso.execute("ALTER TABLE activity_points ADD COLUMN campaignName TEXT").catch(() => {});
+  await turso.execute("ALTER TABLE guild_settings ADD COLUMN currentCampaignName TEXT").catch(() => {});
   await turso.executeMultiple(`
     CREATE TABLE IF NOT EXISTS guild_settings (
       guildId TEXT PRIMARY KEY,

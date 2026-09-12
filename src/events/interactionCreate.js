@@ -11,7 +11,7 @@ const { createEntry, awaitAndAttachImage, submitActiveEntry, finishActiveEntry, 
 const { run } = require('../database/db');
 const { moveEntryUp, moveEntryDown } = require('../services/queueManager');
 const { addPosterRequest, getPosterRequest, updatePosterRequest, addApprovedPoster, getApprovedPosters, deleteApprovedPoster } = require('../database/posterRequests');
-const { addPoints, getLeaderboard } = require('../database/activity');
+const { addPoints, getLeaderboard, getCampaignNames } = require('../database/activity');
 const { query: dbQuery } = require('../database/db');
 
 const pendingEntries = new Map();
@@ -172,6 +172,20 @@ module.exports = async function interactionCreate(client, interaction) {
 
     if (interaction.commandName === 'aktivitat') {
       if (!await hasVorstandRole(interaction)) return interaction.reply({ content: '❌ Nur Vorstandsmitglieder.', ephemeral: true });
+      const campaigns = await getCampaignNames(interaction.guildId);
+      if (campaigns.length > 1) {
+        const options = [
+          new StringSelectMenuOptionBuilder().setLabel('📊 Gesamt (alle Wahlkämpfe)').setValue('__all__'),
+          ...campaigns.map(c => new StringSelectMenuOptionBuilder().setLabel(c.campaignName).setValue(c.campaignName)),
+        ];
+        return interaction.reply({
+          content: 'Für welchen Wahlkampf möchtest du das Leaderboard sehen?',
+          components: [new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('aktivitat:filter').setPlaceholder('Wahlkampf wählen').addOptions(options)
+          )],
+          ephemeral: true,
+        });
+      }
       const board = await getLeaderboard(interaction.guildId);
       if (!board.length) return interaction.reply({ content: '📊 Noch keine Aktivitätspunkte vorhanden.', ephemeral: true });
       const lines = board.slice(0, 20).map((e, i) => `**${i + 1}.** <@${e.userId}> — **${e.total}** Punkte`);
@@ -229,7 +243,11 @@ module.exports = async function interactionCreate(client, interaction) {
           return interaction.reply({ content: `❌ Kein aktiver **${typName}** gefunden.`, ephemeral: true });
         }
         await run("UPDATE entries SET status='finished',finishedAt=? WHERE guildId=? AND status!='finished'", [Date.now(), interaction.guildId]);
-        await updateGuildSettings(interaction.guildId, { activeEntryId: null, wahlkampftyp: null });
+        // Aktivitätspunkte ohne campaignName mit aktuellem Namen taggen
+        if (settings.currentCampaignName) {
+          await run("UPDATE activity_points SET campaignName=? WHERE guildId=? AND campaignName IS NULL", [settings.currentCampaignName, interaction.guildId]);
+        }
+        await updateGuildSettings(interaction.guildId, { activeEntryId: null, wahlkampftyp: null, currentCampaignName: null });
         await renderEnded(client, interaction.guildId);
         const typName = typ === 'bundestag' ? 'Bundestagswahlkampf' : 'Landtagswahlkampf';
         return interaction.reply({ content: `✅ **${typName}** beendet.`, ephemeral: true });
@@ -301,6 +319,16 @@ module.exports = async function interactionCreate(client, interaction) {
   // ── Select Menus ──
   if (interaction.isStringSelectMenu()) {
     const [scope, action, ...rest] = interaction.customId.split(':');
+
+    // ── Aktivität Filter ──
+    if (scope === 'aktivitat' && action === 'filter') {
+      const val = interaction.values[0];
+      const board = val === '__all__' ? await getLeaderboard(interaction.guildId) : await getLeaderboard(interaction.guildId, val);
+      if (!board.length) return interaction.update({ content: '📊 Keine Punkte für diesen Wahlkampf.', components: [] });
+      const title = val === '__all__' ? 'Gesamt-Leaderboard' : `Leaderboard: ${val}`;
+      const lines = board.slice(0, 20).map((e, i) => `**${i + 1}.** <@${e.userId}> — **${e.total}** Punkte`);
+      return interaction.update({ content: `📊 **${title}**\n\n${lines.join('\n')}`, components: [] });
+    }
 
     // ── Haupt-Setup ──
     if (scope === 'mainsetup') {
@@ -390,15 +418,15 @@ module.exports = async function interactionCreate(client, interaction) {
     // ── Wahlkampf Typ wählen ──
     if (scope === 'wahlkampf' && action === 'wahltyp') {
       const typ = interaction.values[0];
-      await updateGuildSettings(interaction.guildId, { wahlkampftyp: typ });
-      // Alle Wahlkreise dieses Typs auf grün setzen
+      const campaignName = rest[0] ? decodeURIComponent(rest[0]) : null;
+      await updateGuildSettings(interaction.guildId, { wahlkampftyp: typ, currentCampaignName: campaignName });
       await run("UPDATE wahlkreise SET status='green' WHERE guildId=? AND wahlkampftyp=?", [interaction.guildId, typ]);
       await interaction.update({ content: '⏳ Wahlkampf wird gestartet...', components: [] });
       await renderPanel(client, interaction.guildId);
       await renderCampaign(client, interaction.guildId);
       await renderPlakatPanel(client, interaction.guildId);
       const typName = typ === 'bundestag' ? 'Bundestagswahlkampf' : 'Landtagswahlkampf';
-      await interaction.editReply({ content: `✅ **${typName}** gestartet! Alle Wahlkreise auf 🟢 gesetzt.`, components: [] });
+      await interaction.editReply({ content: `✅ **${typName}${campaignName ? ` — ${campaignName}` : ''}** gestartet! Alle Wahlkreise auf 🟢 gesetzt.`, components: [] });
       return;
     }
 
@@ -609,6 +637,38 @@ module.exports = async function interactionCreate(client, interaction) {
   if (interaction.isModalSubmit()) {
     const [scope, action, ...rest] = interaction.customId.split(':');
 
+    // Wahlkampf erstellen Modal
+    if (scope === 'wahlkampf' && action === 'erstellen' && rest[0] === 'modal') {
+      const campaignName = interaction.fields.getTextInputValue('name');
+      await interaction.reply({
+        content: `**${campaignName}** — Welche Wahl wird vorbereitet?`,
+        components: [new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder().setCustomId(`wahlkampf:wahltyp:${encodeURIComponent(campaignName)}`).setPlaceholder('Wahlkampftyp wählen').addOptions(
+            new StringSelectMenuOptionBuilder().setLabel('🏗️ Bundestagswahl').setValue('bundestag'),
+            new StringSelectMenuOptionBuilder().setLabel('🏠 Landtagswahl').setValue('landtag'),
+          )
+        )],
+        ephemeral: true,
+      });
+      return;
+    }
+
+    // Wahlkampf erstellen Modal
+    if (scope === 'wahlkampf' && action === 'erstellen' && rest[0] === 'modal') {
+      const campaignName = interaction.fields.getTextInputValue('name');
+      await interaction.reply({
+        content: `**${campaignName}** — Welche Wahl wird vorbereitet?`,
+        components: [new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder().setCustomId(`wahlkampf:wahltyp:${encodeURIComponent(campaignName)}`).setPlaceholder('Wahlkampftyp wählen').addOptions(
+            new StringSelectMenuOptionBuilder().setLabel('🏗️ Bundestagswahl').setValue('bundestag'),
+            new StringSelectMenuOptionBuilder().setLabel('🏠 Landtagswahl').setValue('landtag'),
+          )
+        )],
+        ephemeral: true,
+      });
+      return;
+    }
+
     // Entry Modal (normal + approved)
     if (scope === 'entry' && action === 'create' && rest[0] === 'modal') {
       const entryType = rest[1];
@@ -754,7 +814,7 @@ module.exports = async function interactionCreate(client, interaction) {
         }
         await addApprovedPoster(interaction.guildId, request.imageUrl, request.userId);
         const pts2 = settings?.pointsPoster ?? 3;
-        await addPoints(interaction.guildId, request.userId, pts2, 'Wahlplakat angenommen');
+        await addPoints(interaction.guildId, request.userId, pts2, 'Wahlplakat angenommen', settings?.currentCampaignName ?? null);
       }
 
       // Anfrage-Nachricht aktualisieren
@@ -823,7 +883,7 @@ module.exports = async function interactionCreate(client, interaction) {
       }
       await addApprovedPoster(guildId, request.imageUrl, request.userId);
       const pts = (await getGuildSettings(guildId))?.pointsPoster ?? 3;
-      await addPoints(guildId, request.userId, pts, 'Wahlplakat angenommen');
+      await addPoints(guildId, request.userId, pts, 'Wahlplakat angenommen', settings?.currentCampaignName ?? null);
 
       await interaction.message.edit({
         embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x57F287).setFooter({ text: `✅ Angenommen von ${interaction.user.tag}` })],
