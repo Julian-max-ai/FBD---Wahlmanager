@@ -2,6 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { getGuildSettings, updateGuildSettings } = require('../database/settings');
 const { listDistricts } = require('../database/districts');
 const { getQueuedEntries, getActiveEntry, getStats } = require('../database/entries');
+const ui = require('../utils/ui');
 
 const AREA_LINKS = {
   bundestag: {
@@ -60,10 +61,15 @@ async function renderPanel(client, guildId) {
   const districts = await listDistricts(guildId, settings.wahlkampftyp);
   const stats = await getStats(guildId);
 
+  const guild = channel.guild;
   const embed = new EmbedBuilder()
-    .setColor(0x5865F2)
-    .setAuthor({ name: '🔒 Vorstandspanel  ·  Nur für Vorstandsmitglieder' })
-    .setTitle(`${campaignTitle(settings)}`);
+    .setColor(ui.C.panel)
+    .setAuthor({ name: 'Vorstandspanel  ·  intern' })
+    .setTitle(campaignTitle(settings))
+    .setDescription(`Nur für Vorstandsmitglieder\n${ui.RULE}`);
+  ui.applyThumb(embed, guild);
+
+  embed.addFields(...ui.wideBar('vorstand', 'steuerung', 'live'));
 
   if (active) {
     const district = districtName(districts, active.districtId);
@@ -71,20 +77,20 @@ async function renderPanel(client, guildId) {
     const area = active.targetArea ? areaLabel(active.targetArea) : '—';
     const link = active.targetArea ? getAreaLink(settings, active.targetArea) : null;
 
-    const lines = [
-      `**Typ:** ${typeLabel(active.type)}`,
-      `**Wahlkreis:** ${district}  ·  **Gebiet:** ${area}`,
-      `**Text:**\n\`\`\`\n${active.text.slice(0, 250)}${active.text.length > 250 ? '…' : ''}\n\`\`\``,
-      active.imageUrl ? `**Bild:** [Vorschau / Download](${active.imageUrl})` : null,
-      `**Fortschritt:** ${bar}`,
-      link ? `**Kanal:** [→ ${area}](${link})` : null,
-    ].filter(Boolean).join('\n');
-
-    embed.addFields({ name: '▶️  Aktive Aufgabe', value: lines });
+    embed.addFields(
+      { name: 'Typ', value: typeLabel(active.type), inline: true },
+      { name: 'Wahlkreis', value: district, inline: true },
+      { name: 'Gebiet', value: area, inline: true },
+      { name: 'Text', value: `\`\`\`\n${active.text.slice(0, 250)}${active.text.length > 250 ? '…' : ''}\n\`\`\`` },
+      { name: 'Fortschritt', value: bar, inline: true },
+      { name: 'Bild', value: active.imageUrl ? `[Vorschau öffnen](${active.imageUrl})` : '*kein Bild*', inline: true },
+      { name: 'Kanal', value: link ? `[Zum Einreichungskanal](${link})` : '—', inline: true },
+    );
+    if (active.imageUrl?.startsWith('http')) embed.setImage(active.imageUrl);
   } else {
     embed.addFields({
-      name: '▶️  Aktive Aufgabe',
-      value: '*Keine aktive Aufgabe.*\nErstelle einen neuen Eintrag über den Button unten.',
+      name: 'Aktive Aufgabe',
+      value: '*Keine aktive Aufgabe.*\nNeuen Eintrag über den Button unten anlegen.',
     });
   }
 
@@ -92,21 +98,21 @@ async function renderPanel(client, guildId) {
     const lines = queue.slice(0, 8).map((e, i) => {
       const d = districtName(districts, e.districtId);
       const a = e.targetArea ? areaLabel(e.targetArea) : '—';
-      const tag = i === 0 ? '**» Nächste**' : `\`${i + 1}.\``;
-      return `${tag}  ${typeLabel(e.type)}  ·  ${d}  ·  ${a}`;
+      const tag = i === 0 ? '**nächste**' : `\`${i + 1}\``;
+      return `${tag}  ·  ${typeLabel(e.type)}  ·  ${d}  ·  ${a}`;
     });
     if (queue.length > 8) lines.push(`*… und ${queue.length - 8} weitere*`);
-    embed.addFields({ name: `📦  Warteschlange  ·  ${queue.length} Einträge`, value: lines.join('\n') });
+    embed.addFields({ name: `Warteschlange  ·  ${queue.length}`, value: lines.join('\n') });
   } else {
-    embed.addFields({ name: '📦  Warteschlange', value: '*Leer*' });
+    embed.addFields({ name: 'Warteschlange', value: '*Leer*' });
   }
 
   embed.addFields(
-    { name: '✅ Erledigt', value: `\`${stats.finished}\``, inline: true },
-    { name: '🕐 Offen', value: `\`${stats.open}\``, inline: true },
-    { name: '📊 Gesamt', value: `\`${stats.finished + stats.open}\``, inline: true },
+    { name: 'Erledigt', value: `\`${stats.finished}\``, inline: true },
+    { name: 'Offen', value: `\`${stats.open}\``, inline: true },
+    { name: 'Gesamt', value: `\`${stats.finished + stats.open}\``, inline: true },
   );
-  embed.setFooter({ text: 'Letzte Aktualisierung' }).setTimestamp();
+  embed.setFooter(ui.FOOTER).setTimestamp();
 
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('entry:create').setLabel('➕ Neu erstellen').setStyle(ButtonStyle.Primary),
@@ -149,39 +155,39 @@ async function renderCampaign(client, guildId) {
     const areaLink = active.targetArea ? getAreaLink(settings, active.targetArea) : null;
 
     embed = new EmbedBuilder()
-      .setColor(0x57F287)
-      .setAuthor({ name: `📢  ${campaignTitle(settings)}` })
+      .setColor(ui.C.campaign)
+      .setAuthor({ name: campaignTitle(settings) })
       .setTitle('Aktuelle Aufgabe')
-      .setDescription(`Bitte reicht folgendes auf dem Bundestagsserver ein!\n\n**${typeLabel(active.type)}**  ·  Wahlkreis: **${district}**${area ? `  ·  Gebiet: **${area}**` : ''}`)
-      .addFields({ name: '📋 Text zum Einreichen', value: `\`\`\`\n${active.text.slice(0, 1000)}\n\`\`\`` });
-
-    if (active.imageUrl) {
-      embed.addFields({ name: '🖼️ Wahlplakat', value: `[📥 Bild herunterladen / ansehen](${active.imageUrl})` });
-      embed.setImage(active.imageUrl);
-    }
-
-    if (areaLink) {
-      embed.addFields({ name: '📍 Wo einreichen?', value: `[→ ${area} — Zum Einreichungskanal](${areaLink})` });
-    }
-
-    embed.addFields({ name: '📤 Einreichungsfortschritt', value: bar });
-
+      .setDescription(`Bitte auf dem Bundestagsserver einreichen.\n${ui.RULE}`);
+    ui.applyThumb(embed, channel.guild);
+    embed.addFields(
+      ...ui.wideBar('aufgabe', 'mitglieder', 'live'),
+      { name: 'Material', value: typeLabel(active.type), inline: true },
+      { name: 'Wahlkreis', value: district, inline: true },
+      { name: 'Gebiet', value: area || '—', inline: true },
+      { name: 'Text zum Einreichen', value: `\`\`\`\n${active.text.slice(0, 1000)}\n\`\`\`` },
+      { name: 'Fortschritt', value: bar, inline: true },
+      { name: 'Einreichen', value: areaLink ? `[Kanal öffnen](${areaLink})` : '—', inline: true },
+      { name: 'Plakat', value: active.imageUrl ? `[Bild öffnen](${active.imageUrl})` : '*kein Bild*', inline: true },
+    );
+    if (active.imageUrl?.startsWith('http')) embed.setImage(active.imageUrl);
     if (queue.length > 0) {
       const next = queue[0];
       embed.addFields({
-        name: '⏭️ Als nächstes',
+        name: 'Als nächstes',
         value: `${typeLabel(next.type)}  ·  ${districtName(districts, next.districtId)}  ·  ${next.targetArea ? areaLabel(next.targetArea) : '—'}`,
       });
     }
-
-    embed.setFooter({ text: 'Klickt auf "+1 Eingereicht" nachdem ihr es eingereicht habt!' }).setTimestamp();
+    embed.setFooter({ text: 'Nach dem Einreichen auf „+1 Eingereicht“ klicken' }).setTimestamp();
   } else {
     embed = new EmbedBuilder()
-      .setColor(0x99AAB5)
-      .setAuthor({ name: `📢  ${campaignTitle(settings)}` })
+      .setColor(ui.C.mute)
+      .setAuthor({ name: campaignTitle(settings) })
       .setTitle('Aktuelle Aufgabe')
-      .setDescription('*Aktuell keine aktive Aufgabe.*\nSchaut später nochmal rein!')
-      .setFooter({ text: 'FBD Wahlkampfverwaltung' }).setTimestamp();
+      .setDescription(`*Aktuell keine aktive Aufgabe.*\nSchaut später nochmal vorbei.\n${ui.RULE}`)
+      .addFields(...ui.wideBar('pause', 'mitglieder', 'FBD'))
+      .setFooter(ui.FOOTER).setTimestamp();
+    ui.applyThumb(embed, channel.guild);
   }
 
   const row = new ActionRowBuilder().addComponents(
@@ -211,18 +217,20 @@ async function renderEnded(client, guildId) {
       const pm = await vc.messages.fetch(settings.panelMessageId).catch(() => null);
       if (pm) {
         const panelEmbed = new EmbedBuilder()
-          .setColor(0x5865F2)
-          .setAuthor({ name: '🔒 Vorstandspanel  ·  Nur für Vorstandsmitglieder' })
+          .setColor(ui.C.mute)
+          .setAuthor({ name: 'Vorstandspanel  ·  intern' })
           .setTitle('Kein aktiver Wahlkampf')
-          .setDescription('Starte einen neuen Wahlkampf mit `/wahlkampf erstellen`.')
+          .setDescription(`Neuen Wahlkampf starten mit \`/wahlkampf erstellen\`.\n${ui.RULE}`)
           .addFields(
-            { name: '▶️ Aktive Aufgabe', value: '*Kein aktiver Wahlkampf.*' },
-            { name: '📦 Warteschlange', value: '*Leer*' },
-            { name: '✅ Erledigt', value: `\`${stats.finished}\``, inline: true },
-            { name: '🕐 Offen', value: '`0`', inline: true },
-            { name: '📊 Gesamt', value: `\`${stats.finished}\``, inline: true },
+            ...ui.wideBar('pause', 'vorstand', 'FBD'),
+            { name: 'Aktive Aufgabe', value: '*Kein aktiver Wahlkampf.*' },
+            { name: 'Warteschlange', value: '*Leer*' },
+            { name: 'Erledigt', value: `\`${stats.finished}\``, inline: true },
+            { name: 'Offen', value: '`0`', inline: true },
+            { name: 'Gesamt', value: `\`${stats.finished}\``, inline: true },
           )
-          .setFooter({ text: 'Letzte Aktualisierung' }).setTimestamp();
+          .setFooter(ui.FOOTER).setTimestamp();
+        ui.applyThumb(panelEmbed, vc.guild);
 
         const row1 = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('entry:create').setLabel('➕ Neu erstellen').setStyle(ButtonStyle.Primary).setDisabled(true),
@@ -245,12 +253,18 @@ async function renderEnded(client, guildId) {
     const cc = await client.channels.fetch(settings.campaignChannelId).catch(() => null);
     if (cc) {
       const endEmbed = new EmbedBuilder()
-        .setColor(0xF1C40F)
-        .setAuthor({ name: '🏁 Wahlkampf beendet' })
+        .setColor(ui.C.gold)
+        .setAuthor({ name: 'Wahlkampf beendet' })
         .setTitle(title)
-        .setDescription('Vielen Dank für euren Einsatz im Wahlkampf!\nWir hoffen auf starke Ergebnisse und freuen uns auf den nächsten Wahlkampf.\n\n🗳️ **Viel Erfolg bei der Wahl!**')
-        .addFields({ name: '📊 Erledigte Aufgaben', value: `\`${stats.finished}\``, inline: true })
-        .setFooter({ text: 'FBD Wahlkampfverwaltung' }).setTimestamp();
+        .setDescription(`Danke für euren Einsatz.\nViel Erfolg bei der Wahl.\n${ui.RULE}`)
+        .addFields(
+          ...ui.wideBar('abschluss', 'danke', 'FBD'),
+          { name: 'Erledigte Aufgaben', value: `\`${stats.finished}\``, inline: true },
+          { name: 'Status', value: '`beendet`', inline: true },
+          { name: 'Nächster Schritt', value: '`/wahlkampf erstellen`', inline: true },
+        )
+        .setFooter(ui.FOOTER).setTimestamp();
+      ui.applyThumb(endEmbed, cc.guild);
 
       if (settings.campaignMessageId) {
         const cm = await cc.messages.fetch(settings.campaignMessageId).catch(() => null);
@@ -295,16 +309,20 @@ async function renderPlakatPanel(client, guildId) {
   }
 
   const embed = new EmbedBuilder()
-    .setColor(isActive ? 0xEB459E : 0x99AAB5)
-    .setAuthor({ name: '🖼️  Wahlplakat einreichen' })
+    .setColor(isActive ? ui.C.poster : ui.C.mute)
+    .setAuthor({ name: 'Wahlplakat einreichen' })
     .setTitle(isActive ? campaignTitle(settings) : 'Kein aktiver Wahlkampf')
     .setDescription(
       isActive
-        ? 'Reiche hier ein Wahlplakat beim Vorstand ein.\nDer Vorstand prüft deine Anfrage und gibt sie frei oder lehnt sie ab.\n\n**Voraussetzungen:**\n• Das Bild darf **nicht** urheberrechtlich geschützt sein\n• Gib die Quelle des Hintergrundbildes an (falls vorhanden)\n• Nur direkte Bild-URLs (endet auf `.png`, `.jpg`, `.gif`, `.webp`)'
-        : '*Sobald ein neuer Wahlkampf gestartet wird, kannst du hier Plakate einreichen.*'
+        ? `Reiche ein Plakat beim Vorstand ein. Nach der Prüfung wird es angenommen oder abgelehnt.\n${ui.RULE}\n**Voraussetzungen**\n• nicht urheberrechtlich geschützt\n• Quelle des Hintergrunds angeben, falls vorhanden\n• direkte Bild-URL (\`.png\` \`.jpg\` \`.gif\` \`.webp\`)`
+        : `*Sobald ein neuer Wahlkampf startet, kannst du hier Plakate einreichen.*\n${ui.RULE}`
     )
-    .addFields({ name: '📍 Wahlkreis-Status', value: districtField })
-    .setFooter({ text: 'FBD Wahlkampfverwaltung' }).setTimestamp();
+    .addFields(
+      ...ui.wideBar(isActive ? 'einreichen' : 'pause', 'plakat', 'FBD'),
+      { name: 'Wahlkreis-Status', value: districtField || '—' },
+    )
+    .setFooter(ui.FOOTER).setTimestamp();
+  ui.applyThumb(embed, channel.guild);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('plakat:request').setLabel('🖼️ Wahlplakat einreichen').setStyle(ButtonStyle.Primary).setDisabled(!isActive),
@@ -327,23 +345,24 @@ function buildArchiveEmbed(entry, districtNameStr, settings) {
   const areaLink = entry.targetArea ? getAreaLink(settings, entry.targetArea) : null;
 
   const embed = new EmbedBuilder()
-    .setColor(0x2C2F33)
-    .setAuthor({ name: `📁 Archiviert — ${typeStr}` })
+    .setColor(ui.C.archive)
+    .setAuthor({ name: `Archiv  ·  ${typeStr}` })
     .setTitle(`${districtNameStr}  ·  ${area}`)
-    .setDescription(`Eingereicht von <@${entry.createdBy}>`)
+    .setDescription(`Eingereicht von <@${entry.createdBy}>\n${ui.RULE}`)
     .addFields(
-      { name: '📋 Text', value: `\`\`\`\n${entry.text.slice(0, 1000)}\n\`\`\`` },
-      { name: '📤 Eingereicht', value: `\`${entry.submissionCount} / ${entry.maxSubmissions}\``, inline: true },
-      { name: '📅 Erledigt am', value: new Date(entry.finishedAt).toLocaleString('de-DE'), inline: true },
+      ...ui.wideBar('archiv', 'erledigt', 'FBD'),
+      { name: 'Text', value: `\`\`\`\n${entry.text.slice(0, 1000)}\n\`\`\`` },
+      { name: 'Eingereicht', value: `\`${entry.submissionCount} / ${entry.maxSubmissions}\``, inline: true },
+      { name: 'Erledigt am', value: new Date(entry.finishedAt).toLocaleString('de-DE'), inline: true },
     );
 
-  if (areaLink) embed.addFields({ name: '📍 Kanal', value: `[${area}](${areaLink})`, inline: true });
+  if (areaLink) embed.addFields({ name: 'Kanal', value: `[${area}](${areaLink})`, inline: true });
   if (entry.imageUrl) {
-    embed.addFields({ name: '🖼️ Bild', value: `[Download / Ansehen](${entry.imageUrl})` });
-    embed.setImage(entry.imageUrl);
+    embed.addFields({ name: 'Bild', value: `[Ansehen](${entry.imageUrl})` });
+    if (entry.imageUrl.startsWith('http')) embed.setImage(entry.imageUrl);
   }
 
-  embed.setFooter({ text: 'FBD Wahlkampfarchiv' }).setTimestamp(entry.finishedAt);
+  embed.setFooter({ text: 'FBD  ·  Wahlkampfarchiv' }).setTimestamp(entry.finishedAt);
   return embed;
 }
 
